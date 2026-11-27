@@ -1,0 +1,9 @@
+.env
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite3
+media/
+apm_modules/

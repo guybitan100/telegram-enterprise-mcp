@@ -1,0 +1,6 @@
+name: telegram-enterprise-mcp
+version: 0.1.0
+description: Agent instructions and skills for the Telegram Enterprise MCP.
+author: Guy Bitan
+license: MIT
+includes: auto

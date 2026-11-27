@@ -1,7 +1,7 @@
-# Repository instructions
-
-Read `.github/SKILL.md` before changing the Telegram MCP. The repository-specific
-agent guidance is in `.github/telegram-engineer.agent.md`.
+---
+description: Repository guardrails for the Telegram Enterprise MCP
+applyTo: "**/*"
+---
 
 - Inspect `git status` and existing files before editing.
 - Keep the local STDIO MCP runnable with Python 3.12.

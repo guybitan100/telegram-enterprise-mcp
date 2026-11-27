@@ -2,6 +2,7 @@
 name: telegram-bot-builder
 description: Maintain the Telegram Enterprise MCP with safe read and explicit-write Telegram Bot API tools.
 ---
+
 # Workflow
 
 1. Inspect the repository, `git status`, runtime, and existing tests before

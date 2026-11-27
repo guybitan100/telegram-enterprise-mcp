@@ -23,16 +23,25 @@ BOT_ROOT = Path(__file__).resolve().parents[1]
 class FakeStartMessage:
     def __init__(self):
         self.from_user = SimpleNamespace(id=42)
-        self.photo = None
+        self.chat = SimpleNamespace(id=42, type="private")
+        self.photos = []
         self.photo_caption = None
         self.audios = []
         self.videos = []
+        self.invoices = []
         self.text = None
         self.menu_reply_markup = None
         self.reply_markup = None
 
-    async def answer_photo(self, photo, *, caption, reply_markup=None):
-        self.photo = photo
+    async def answer_photo(self, photo, *, caption, protect_content, reply_markup=None):
+        self.photos.append(
+            {
+                "photo": photo,
+                "caption": caption,
+                "protect_content": protect_content,
+                "reply_markup": reply_markup,
+            }
+        )
         self.photo_caption = caption
         self.reply_markup = reply_markup
 
@@ -66,6 +75,9 @@ class FakeStartMessage:
         )
         self.reply_markup = reply_markup
 
+    async def answer_invoice(self, **kwargs):
+        self.invoices.append(kwargs)
+
     async def answer(self, text, *, reply_markup=None):
         self.text = text
         self.menu_reply_markup = reply_markup
@@ -86,6 +98,7 @@ class StartFlowE2ETests(unittest.TestCase):
                 description TEXT NOT NULL DEFAULT '',
                 campaign TEXT NOT NULL DEFAULT '',
                 cover TEXT,
+                poster TEXT,
                 full TEXT NOT NULL,
                 preview TEXT NOT NULL,
                 preview_video TEXT,
@@ -98,25 +111,31 @@ class StartFlowE2ETests(unittest.TestCase):
             "PRIMARY KEY(uid, track, reaction))"
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
-            "VALUES(?,?,?,?,?,?)",
+            "CREATE TABLE orders(id TEXT PRIMARY KEY, uid INTEGER, track INTEGER, "
+            "amount INTEGER, paid INTEGER DEFAULT 0, charge TEXT)"
+        )
+        app.db.execute(
+            "INSERT INTO tracks(title, description, full, preview, poster, preview_video, hash) "
+            "VALUES(?,?,?,?,?,?,?)",
             (
                 "aatini turha sharrahni",
                 "Offline test track",
                 "/tmp/full.mp3",
                 "/tmp/preview.mp3",
+                "/tmp/poster.jpg",
                 "/tmp/preview.mp4",
                 "offline-test-hash",
             ),
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
-            "VALUES(?,?,?,?,?,?)",
+            "INSERT INTO tracks(title, description, full, preview, poster, preview_video, hash) "
+            "VALUES(?,?,?,?,?,?,?)",
             (
                 "second preview",
                 "Another offline test track",
                 "/tmp/full-2.mp3",
                 "/tmp/preview-2.mp3",
+                "/tmp/poster-2.jpg",
                 "/tmp/preview-2.mp4",
                 "offline-test-hash-2",
             ),
@@ -133,15 +152,58 @@ class StartFlowE2ETests(unittest.TestCase):
         with patch("infra.bot.Path.is_file", return_value=True):
             asyncio.run(app.start(message))
 
-        self.assertIsNone(message.photo)
+        self.assertEqual(len(message.photos), 2)
         self.assertIn("NOVA ISR ∞ Music Store", message.text)
-        self.assertEqual(len(message.videos), 2)
-        self.assertTrue(all(item["protect_content"] for item in message.videos))
-        self.assertTrue(all(item["supports_streaming"] for item in message.videos))
-        self.assertTrue(all(item["reply_markup"] for item in message.videos))
-        self.assertTrue(all(item["duration"] == 30 for item in message.videos))
+        self.assertFalse(message.videos)
+        self.assertTrue(all(item["protect_content"] for item in message.photos))
+        self.assertTrue(all(item["reply_markup"] for item in message.photos))
+        play_buttons = [
+            row[0].text
+            for item in message.photos
+            for row in item["reply_markup"].inline_keyboard[:1]
+        ]
+        self.assertEqual(play_buttons, ["▶️ Play 30s", "▶️ Play 30s"])
         self.assertFalse(message.audios)
         self.assertIsNone(message.menu_reply_markup)
+
+    def test_play_button_sends_video_only_after_click(self):
+        class FakeQuery:
+            def __init__(self):
+                self.data = "play:1"
+                self.from_user = SimpleNamespace(id=42)
+                self.message = FakeStartMessage()
+
+            async def answer(self, text=None, **kwargs):
+                self.answer_text = text
+
+        query = FakeQuery()
+        with patch("infra.bot.Path.is_file", return_value=True):
+            asyncio.run(app.play(query))
+
+        self.assertEqual(len(query.message.videos), 1)
+        self.assertFalse(query.message.audios)
+        self.assertTrue(query.message.videos[0]["protect_content"])
+
+    def test_download_button_creates_stars_invoice(self):
+        class FakeQuery:
+            def __init__(self):
+                self.data = "b:1"
+                self.from_user = SimpleNamespace(id=42)
+                self.message = FakeStartMessage()
+
+            async def answer(self, text=None, **kwargs):
+                self.answer_text = text
+
+        query = FakeQuery()
+        with patch("infra.bot.Path.is_file", return_value=True):
+            asyncio.run(app.buy(query))
+
+        self.assertEqual(len(query.message.invoices), 1)
+        invoice = query.message.invoices[0]
+        self.assertEqual(invoice["currency"], "XTR")
+        self.assertEqual(invoice["prices"][0].amount, 50)
+        self.assertTrue(invoice["payload"])
+        self.assertEqual(app.db.execute("SELECT count(*) FROM orders").fetchone()[0], 1)
 
     def test_reaction_toggles_and_updates_count(self):
         class FakeQueryMessage:

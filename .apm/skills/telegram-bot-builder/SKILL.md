@@ -34,12 +34,13 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 
 For the NOVA music bot public experience:
 
-1. On `/start` and `/music`, send every available catalog video preview in
-   order; do not render a song-selection menu.
-2. Send each generated 30-second MP4 preview with its catalog cover,
-   `supports_streaming=True`, and `protect_content=True`.
-   Never send the full MP3 through a public callback, purchase flow, or stale
-   inline button.
+1. On `/start` and `/music`, send every available static catalog-cover card in
+   order; do not autoplay media or render a song-selection menu.
+2. Put a centered play symbol on each card and expose a `▶️ Play 30s` callback.
+   Send the generated 30-second MP4 preview only after an explicit click, with
+   `supports_streaming=True` and `protect_content=True`.
+   Send the full MP3 only after a validated Telegram Stars payment; stale or
+   unauthenticated callbacks must never bypass payment.
 3. Use exactly three short campaign lines per preview. Do not add automatic
    next/previous navigation to the preview message.
 4. Provide reaction buttons with server-counted per-track totals. Toggle by
@@ -47,7 +48,8 @@ For the NOVA music bot public experience:
    accept client-supplied counts.
 5. Cover catalog, preview-only, reaction, and presentation flows in the single
    offline E2E suite at `bots/nova_isr_music_bot/tests/test_e2e.py`; do not use
-   live Telegram or real payments.
+   live Telegram or real payments. Cover invoice creation, pre-checkout
+   validation, payment idempotency, and download authorization offline.
 
 ## NOVA music catalog and Suno metadata
 
@@ -74,7 +76,7 @@ For the NOVA music bot public experience:
    resulting SQLite track count and cover paths when changing catalog behavior.
 8. Validate `bots/nova_isr_music_bot/logo.png` as a readable PNG for BotFather
    branding. Do not send it in `/start`; use each catalog track's cached Suno
-   cover as the video preview visual and thumbnail.
+   cover as the card visual and video thumbnail.
 
 ## Bulk local MP3 ingestion
 

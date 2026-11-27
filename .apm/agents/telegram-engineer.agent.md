@@ -24,9 +24,11 @@ thumbnail.
 
 The public music flow is preview-only: `/start` and `/music` send every
 available catalog track automatically, with no song-selection menu. Play only
-the generated 30-second video previews with the catalog cover as the visual,
-protect preview content, and do not expose full MP3 files or purchase/download
-buttons. Each preview may include per-track reaction buttons and counters;
+static catalog-cover cards with a centered play symbol. Do not autoplay media:
+the `▶️ Play 30s` callback sends the protected 30-second video preview only
+after an explicit click. Full MP3 downloads are available only after a
+validated Telegram Stars payment; never expose them through an unauthenticated
+or stale callback. Each card may include per-track reaction buttons and counters;
 reaction toggles must be idempotent per user, track, and reaction.
 
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at

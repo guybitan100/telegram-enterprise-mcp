@@ -45,9 +45,9 @@ values, tokens, customer media, or database contents.
 - Chat allowlists, dry-run defaults, explicit write gates, and refund guards
   remain intact in the MCP.
 - Paid media and original files are not exposed before successful payment.
-- The public music flow never exposes full MP3 files, including through stale
-  callbacks or legacy purchase paths; only protected 30-second previews are
-  sent.
+- The public music flow exposes full MP3 files only after a validated Telegram
+  Stars payment; stale or unauthenticated callbacks must never bypass payment.
+  Previews remain protected 30-second media.
 - Preview reaction callbacks validate the track and reaction key, toggle one
   user reaction idempotently, and update counts without trusting client totals.
 - File paths are local, predictable, and cannot be supplied by untrusted users.
@@ -81,9 +81,10 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` send all available video previews automatically without
-  a song-selection menu. Each preview has the catalog cover and exactly three
-  campaign-caption lines.
+- `/start` and `/music` send all available static cover cards without a
+  song-selection menu. Each card has a centered play symbol and a `▶️ Play 30s`
+  callback; the protected video preview is sent only after a click and keeps
+  exactly three campaign-caption lines.
 
 ### CI and APM packaging
 

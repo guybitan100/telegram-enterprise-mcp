@@ -44,7 +44,9 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 
 Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
-caption. The bot rejects duplicate files, creates a midpoint preview with
+caption. Use `/balance` privately as the configured admin to read the bot's
+authoritative Telegram Stars balance; `/stats` reports local paid-order counts
+and gross configured-price totals. The bot rejects duplicate files, creates a midpoint preview with
 fade-in/out, and stores the original by SHA-256 content hash. The `/start` and
 `/music` commands send all catalog tracks automatically as Telegram paid-media
 videos with their Suno covers, without a song-selection menu. Telegram displays

@@ -6,7 +6,7 @@ import struct
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 
 # The real handler module validates configuration at import time. Use harmless
@@ -201,6 +201,27 @@ class StartFlowE2ETests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(order["paid"], 1)
         self.assertTrue(order["charge"].startswith("paid:99:2:"))
+
+    def test_balance_reports_telegram_balance_to_admin(self):
+        class FakeAdminMessage:
+            from_user = SimpleNamespace(id=1)
+            chat = SimpleNamespace(type="private")
+
+            def __init__(self):
+                self.answers = []
+
+            async def answer(self, text):
+                self.answers.append(text)
+
+        message = FakeAdminMessage()
+        with patch.object(
+            app.bot,
+            "get_my_star_balance",
+            new=AsyncMock(return_value=SimpleNamespace(amount=321)),
+        ):
+            asyncio.run(app.balance(message))
+
+        self.assertIn("Telegram bot balance: 321 Stars", message.answers[0])
 
     def test_reaction_toggles_and_updates_count(self):
         class FakeQueryMessage:

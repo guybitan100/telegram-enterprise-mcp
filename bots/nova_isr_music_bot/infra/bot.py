@@ -715,7 +715,7 @@ async def support(message: Message) -> None:
 async def admin_menu(message: Message) -> None:
     if is_admin_private(message):
         await message.answer(
-            "Send an MP3 as audio with its title in the caption. It will be published automatically. /stats"
+            "Send an MP3 as audio with its title in the caption. It will be published automatically. /stats /balance"
         )
 
 
@@ -724,6 +724,27 @@ async def stats(message: Message) -> None:
     if is_admin_private(message):
         sales = db.execute("SELECT count(*) FROM orders WHERE paid=1").fetchone()[0]
         await message.answer(f"Sales: {sales} | Gross: {sales * PRICE_STARS} Stars")
+
+
+@dp.message(Command("balance", "revenue"))
+async def balance(message: Message) -> None:
+    """Show Telegram's authoritative bot balance to the private admin."""
+    if not is_admin_private(message):
+        return
+    try:
+        star_balance = await bot.get_my_star_balance()
+    except Exception:
+        log.exception("Could not read Telegram Stars balance")
+        await message.answer("Could not read the Telegram Stars balance right now.")
+        return
+    sales = db.execute("SELECT count(*) FROM orders WHERE paid=1").fetchone()[0]
+    await message.answer(
+        "Telegram bot balance: "
+        f"{star_balance.amount} Stars\n"
+        f"Recorded paid orders: {sales}\n"
+        f"Recorded gross at current price: {sales * PRICE_STARS} Stars\n\n"
+        "For lifetime proceeds and withdrawal status, open the bot's Monetization / Stars Balance screen in Telegram."
+    )
 
 
 @dp.message(F.audio)

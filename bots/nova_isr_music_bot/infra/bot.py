@@ -66,7 +66,8 @@ db.executescript(
         track INTEGER NOT NULL,
         amount INTEGER NOT NULL DEFAULT 50,
         paid INTEGER NOT NULL DEFAULT 0,
-        charge TEXT UNIQUE
+        charge TEXT UNIQUE,
+        invoice_message_id INTEGER
     );
     CREATE UNIQUE INDEX IF NOT EXISTS one_pending
         ON orders(uid, track) WHERE paid=0;
@@ -80,6 +81,11 @@ db.executescript(
 )
 try:
     db.execute("ALTER TABLE orders ADD COLUMN amount INTEGER NOT NULL DEFAULT 50")
+except sqlite3.OperationalError as exc:
+    if "duplicate column name" not in str(exc).lower():
+        raise
+try:
+    db.execute("ALTER TABLE orders ADD COLUMN invoice_message_id INTEGER")
 except sqlite3.OperationalError as exc:
     if "duplicate column name" not in str(exc).lower():
         raise
@@ -550,8 +556,11 @@ async def buy(query: CallbackQuery) -> None:
         await deliver(query.message.chat.id, query.from_user.id, track_id)
         return
     order = await pending_order(query.from_user.id, track_id)
+    if order["invoice_message_id"]:
+        await query.answer("Payment invoice already sent above.")
+        return
     await query.answer()
-    await query.message.answer_invoice(
+    invoice = await query.message.answer_invoice(
         title=f"{display_title(row['title'])} — Full Track",
         description="Download the full MP3 file.",
         payload=order["id"],
@@ -559,6 +568,14 @@ async def buy(query: CallbackQuery) -> None:
         prices=[LabeledPrice(label=display_title(row["title"]), amount=order["amount"])],
         provider_token="",
     )
+    invoice_message_id = getattr(invoice, "message_id", None)
+    if invoice_message_id is not None:
+        async with db_lock:
+            db.execute(
+                "UPDATE orders SET invoice_message_id=? WHERE id=? AND paid=0",
+                (invoice_message_id, order["id"]),
+            )
+            db.commit()
 
 
 @dp.pre_checkout_query()

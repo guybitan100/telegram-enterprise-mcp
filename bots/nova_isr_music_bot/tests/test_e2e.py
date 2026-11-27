@@ -63,6 +63,7 @@ class FakeStartMessage:
 
     async def answer_invoice(self, **kwargs):
         self.invoices.append(kwargs)
+        return SimpleNamespace(message_id=1000 + len(self.invoices))
 
     async def answer(self, text, *, reply_markup=None):
         self.text = text
@@ -97,7 +98,8 @@ class StartFlowE2ETests(unittest.TestCase):
         )
         app.db.execute(
             "CREATE TABLE orders(id TEXT PRIMARY KEY, uid INTEGER, track INTEGER, "
-            "amount INTEGER, paid INTEGER DEFAULT 0, charge TEXT)"
+            "amount INTEGER, paid INTEGER DEFAULT 0, charge TEXT, "
+            "invoice_message_id INTEGER)"
         )
         app.db.execute(
             "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
@@ -162,6 +164,7 @@ class StartFlowE2ETests(unittest.TestCase):
         query = FakeQuery()
         with patch("infra.bot.Path.is_file", return_value=True):
             asyncio.run(app.buy(query))
+            asyncio.run(app.buy(query))
 
         self.assertEqual(len(query.message.invoices), 1)
         invoice = query.message.invoices[0]
@@ -169,6 +172,10 @@ class StartFlowE2ETests(unittest.TestCase):
         self.assertEqual(invoice["prices"][0].amount, 50)
         self.assertTrue(invoice["payload"])
         self.assertEqual(app.db.execute("SELECT count(*) FROM orders").fetchone()[0], 1)
+        self.assertIsNotNone(
+            app.db.execute("SELECT invoice_message_id FROM orders").fetchone()[0]
+        )
+        self.assertEqual(query.answer_text, "Payment invoice already sent above.")
 
     def test_reaction_toggles_and_updates_count(self):
         class FakeQueryMessage:

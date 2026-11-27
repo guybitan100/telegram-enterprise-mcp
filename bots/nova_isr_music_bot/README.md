@@ -34,9 +34,9 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 - `infra/bot.py`: public Telegram handlers, catalog, delivery, and payment flow.
 - `infra/auth.py`: private admin authorization checks.
 - `infra/config.py`: environment loading and validated runtime configuration.
-- `catalog.json`: local MP3 titles, descriptions, and optional Suno cover metadata.
-- `logo.png`: canonical bot branding asset, used in the `/start` welcome
-  message and as the BotFather profile icon.
+- `catalog.json`: local MP3 titles, descriptions, three-line campaigns, and
+  Suno cover metadata.
+- `logo.png`: canonical BotFather profile icon; it is not sent inside the bot.
 - `tests/`: focused bot tests; keep bot tests in this directory.
 - `data/covers/`: downloaded cover art and generated previews; ignored by Git.
 
@@ -45,13 +45,14 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
-fade-in/out, and stores the original by SHA-256 content hash. Users browse one
-preview at a time with `/start` or `/music`. Each item contains three short
-campaign lines, protected 30-second playback, reaction buttons with per-track
-counters, and previous/next navigation. Full MP3 downloads are disabled.
+fade-in/out, and stores the original by SHA-256 content hash. Users browse all
+catalog titles from the `/start` or `/music` menu, then open one protected
+30-second preview at a time. Each preview contains three short campaign lines
+and reaction buttons with per-track counters. Full MP3 downloads are disabled.
 
 At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
-Suno cover art is cached locally when available. Tracks rejected by Suno's
+Suno cover art is cached locally and used as the selected track thumbnail.
+Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.
 
@@ -59,7 +60,7 @@ Before changing bot code or behavior, run the focused tests under `tests/` and
 record the baseline. Rerun them after the change. Tests must not require `.env`,
 live Telegram access, customer media, or the local runtime database.
 
-Run the offline sanity suite with:
+Run the single offline end-to-end suite with:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py'

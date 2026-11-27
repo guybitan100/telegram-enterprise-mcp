@@ -43,7 +43,6 @@ dp = Dispatcher()
 BOT_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_FILE = BOT_ROOT / "catalog.json"
 LOCAL_TRACK_DIR = BOT_ROOT / "mp3" / "nova_isr"
-LOGO_FILE = BOT_ROOT / "logo.png"
 db = sqlite3.connect(DATA_DIR / "store.db", timeout=30)
 db.row_factory = sqlite3.Row
 db.execute("PRAGMA journal_mode=WAL")
@@ -54,6 +53,7 @@ db.executescript(
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
+        campaign TEXT NOT NULL DEFAULT '',
         cover TEXT,
         full TEXT NOT NULL,
         preview TEXT NOT NULL,
@@ -82,7 +82,11 @@ try:
 except sqlite3.OperationalError as exc:
     if "duplicate column name" not in str(exc).lower():
         raise
-for column, definition in (("description", "TEXT NOT NULL DEFAULT ''"), ("cover", "TEXT")):
+for column, definition in (
+    ("description", "TEXT NOT NULL DEFAULT ''"),
+    ("campaign", "TEXT NOT NULL DEFAULT ''"),
+    ("cover", "TEXT"),
+):
     try:
         db.execute(f"ALTER TABLE tracks ADD COLUMN {column} {definition}")
     except sqlite3.OperationalError as exc:
@@ -115,6 +119,9 @@ def track_caption(row: sqlite3.Row) -> str:
 
 def promotional_caption(row: sqlite3.Row) -> str:
     """Return a compact three-line campaign caption for a preview."""
+    campaign = [line.strip() for line in (row["campaign"] or "").splitlines() if line.strip()]
+    if len(campaign) == 3:
+        return "\n".join(campaign)
     title = display_title(row["title"])
     description = " ".join((row["description"] or "").split())
     description = description[:150].rstrip(" .,;:-") or "Feel the sound."
@@ -219,11 +226,12 @@ def sync_local_catalog() -> None:
                     cover_path = str(cover)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, cover, full, preview, hash)
-                VALUES(?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, hash)
+                VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(hash) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
+                    campaign=excluded.campaign,
                     cover=excluded.cover,
                     full=excluded.full,
                     preview=excluded.preview
@@ -231,6 +239,7 @@ def sync_local_catalog() -> None:
                 (
                     item["title"][:120],
                     item.get("description", "")[:900],
+                    "\n".join(item.get("campaign", []))[:900],
                     cover_path,
                     str(full),
                     str(preview),
@@ -316,9 +325,7 @@ async def deliver(chat_id: int, user_id: int, track_id: int) -> None:
     )
 
 
-def preview_keyboard(
-    rows: list[sqlite3.Row], index: int, track_id: int, user_id: int
-) -> InlineKeyboardMarkup:
+def preview_keyboard(track_id: int, user_id: int) -> InlineKeyboardMarkup:
     counts = {
         key: count
         for key, count in db.execute(
@@ -340,24 +347,12 @@ def preview_keyboard(
         )
         for emoji, key in REACTIONS
     ]
-    navigation: list[InlineKeyboardButton] = []
-    if index > 0:
-        navigation.append(
-            InlineKeyboardButton(text="⏮ Previous", callback_data=f"prev:{rows[index - 1]['id']}")
-        )
-    if index + 1 < len(rows):
-        navigation.append(
-            InlineKeyboardButton(text="Next ⏭", callback_data=f"next:{rows[index + 1]['id']}")
-        )
-    else:
-        navigation.append(InlineKeyboardButton(text="Restart 🔄", callback_data="restart"))
-    return InlineKeyboardMarkup(inline_keyboard=[reaction_row, navigation])
+    return InlineKeyboardMarkup(inline_keyboard=[reaction_row])
 
 
 async def send_preview(
-    message: Message, row: sqlite3.Row, rows: list[sqlite3.Row], user_id: int
+    message: Message, row: sqlite3.Row, user_id: int
 ) -> None:
-    index = next(i for i, candidate in enumerate(rows) if candidate["id"] == row["id"])
     cover = Path(row["cover"]) if row["cover"] else None
     await message.answer_audio(
         FSInputFile(row["preview"]),
@@ -366,7 +361,7 @@ async def send_preview(
         caption=promotional_caption(row),
         thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
         protect_content=True,
-        reply_markup=preview_keyboard(rows, index, row["id"], user_id),
+        reply_markup=preview_keyboard(row["id"], user_id),
     )
 
 
@@ -376,12 +371,12 @@ async def start(message: Message) -> None:
     if not rows:
         await message.answer("No previews are available right now.")
         return
-    if LOGO_FILE.is_file():
-        await message.answer_photo(
-            FSInputFile(LOGO_FILE),
-            caption="NOVA ISR ∞ Music Store\n30-second previews only",
-        )
-    await send_preview(message, rows[0], rows, message.from_user.id)
+    buttons = [(display_title(row["title"])[:45], f"t:{row['id']}") for row in rows]
+    markup = keyboard(buttons)
+    await message.answer(
+        "NOVA ISR ∞ Music Store\nChoose a 30-second protected preview",
+        reply_markup=markup,
+    )
 
 
 @dp.callback_query(F.data == "purchases")
@@ -406,8 +401,7 @@ async def show(query: CallbackQuery) -> None:
     if not row or not Path(row["preview"]).is_file():
         await query.message.answer("Track unavailable.")
         return
-    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    await send_preview(query.message, row, rows, query.from_user.id)
+    await send_preview(query.message, row, query.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("react:"))
@@ -417,6 +411,9 @@ async def react(query: CallbackQuery) -> None:
         await query.answer("Reaction unavailable.", show_alert=True)
         return
     track_id, reaction = parsed
+    if not get_track(track_id):
+        await query.answer("Track unavailable.", show_alert=True)
+        return
     async with db_lock:
         existing = db.execute(
             "SELECT 1 FROM reactions WHERE uid=? AND track=? AND reaction=?",
@@ -434,42 +431,11 @@ async def react(query: CallbackQuery) -> None:
             )
         db.commit()
     await query.answer("Reaction updated")
-    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
     row = get_track(track_id)
     if row:
-        index = next(i for i, candidate in enumerate(rows) if candidate["id"] == track_id)
         await query.message.edit_reply_markup(
-            reply_markup=preview_keyboard(rows, index, track_id, query.from_user.id)
+            reply_markup=preview_keyboard(track_id, query.from_user.id)
         )
-
-
-async def navigate(query: CallbackQuery, prefix: str) -> None:
-    await query.answer()
-    track_id = id_from_callback(query.data, prefix)
-    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    row = get_track(track_id) if track_id is not None else None
-    if not row or not rows:
-        await query.message.answer("Preview unavailable.")
-        return
-    await send_preview(query.message, row, rows, query.from_user.id)
-
-
-@dp.callback_query(F.data.startswith("next:"))
-async def next_preview(query: CallbackQuery) -> None:
-    await navigate(query, "next:")
-
-
-@dp.callback_query(F.data.startswith("prev:"))
-async def previous_preview(query: CallbackQuery) -> None:
-    await navigate(query, "prev:")
-
-
-@dp.callback_query(F.data == "restart")
-async def restart(query: CallbackQuery) -> None:
-    await query.answer()
-    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    if rows:
-        await send_preview(query.message, rows[0], rows, query.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("d:"))
@@ -484,38 +450,23 @@ async def buy(query: CallbackQuery) -> None:
 
 @dp.pre_checkout_query()
 async def checkout(query: PreCheckoutQuery) -> None:
-    row = db.execute(
-        "SELECT * FROM orders WHERE id=?", (query.invoice_payload,)
-    ).fetchone()
-    valid = bool(
-        row
-        and row["uid"] == query.from_user.id
-        and not row["paid"]
-        and not is_owned(row["uid"], row["track"])
-        and query.currency == "XTR"
-        and query.total_amount == row["amount"]
-        and get_track(row["track"])
-    )
     await query.answer(
-        ok=valid,
-        error_message=None if valid else "Order unavailable or already purchased.",
+        ok=False,
+        error_message="Full track sales are disabled. Only 30-second previews are available.",
     )
 
 
 @dp.message(F.successful_payment)
 async def payment(message: Message) -> None:
     payment = message.successful_payment
-    status, row = await record_payment(payment, message.from_user.id)
-    if status == "duplicate":
+    try:
         await bot.refund_star_payment(
             message.from_user.id, payment.telegram_payment_charge_id
         )
-        await message.answer("Duplicate payment detected and refunded. Contact support if needed.")
-        return
-    if status == "invalid" or not row:
-        await message.answer(f"Payment issue. Contact @{SUPPORT_HANDLE}.")
-        return
-    await deliver(message.chat.id, message.from_user.id, row["track"])
+        await message.answer("Full track sales are disabled. Your payment was refunded.")
+    except Exception:
+        log.exception("Could not refund a payment received after sales were disabled")
+        await message.answer(f"Full track sales are disabled. Contact @{SUPPORT_HANDLE} for a refund.")
 
 
 @dp.message(Command("paysupport"))
@@ -566,11 +517,12 @@ async def upload(message: Message) -> None:
             shutil.copyfile(preview_tmp, preview)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, cover, full, preview, hash)
-                VALUES(?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, hash)
+                VALUES(?,?,?,?,?,?,?)
                 """,
                 (
                     (message.caption or audio.title or "Untitled")[:120],
+                    "",
                     "",
                     None,
                     str(full),

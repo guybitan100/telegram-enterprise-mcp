@@ -24,9 +24,9 @@ Read the relevant files before reviewing:
 - `.apm/skills/telegram-bot-builder/SKILL.md` for Telegram safety rules.
 - `bots/nova_isr_music_bot/README.md`, `catalog.json`, and its `infra/` modules
   for bot behavior and local catalog ownership.
-- `bots/nova_isr_music_bot/tests/` for focused bot tests. Tests must remain
-  inside the bot directory and must never depend on `.env`, live Telegram,
-  customer media, or the local runtime database.
+- `bots/nova_isr_music_bot/tests/test_e2e.py` for the single offline E2E suite.
+  The suite must remain inside the bot directory and must never depend on
+  `.env`, live Telegram, customer media, or the local runtime database.
 - `apm.yml`, `.apm/agents/`, `.apm/skills/`, and `.apm/instructions/` for
   package structure and front matter.
 
@@ -79,11 +79,10 @@ values, tokens, customer media, or database contents.
   the entire bot from starting.
 - Catalog titles remain normalized in storage while user-facing menus apply
   full title case consistently; filenames must not be renamed for presentation.
-- The bot welcome flow uses the checked-in `logo.png` only when it exists and
-  falls back to text without making startup dependent on the asset.
-- `/start` and `/music` present one preview at a time, with exactly three
-  campaign-caption lines and bounded previous/next navigation rather than a
-  full song-list menu.
+- The checked-in `logo.png` is reserved for BotFather branding and is not sent
+  in the bot flow; selected previews use their catalog/Suno cover thumbnail.
+- `/start` and `/music` present all catalog titles as menu buttons, while each
+  selected item opens one preview with exactly three campaign-caption lines.
 
 ### CI and APM packaging
 
@@ -151,8 +150,8 @@ values, tokens, customer media, or database contents.
 6. Before changing bot code, run the existing focused tests and record the
    baseline. After changes, rerun the baseline suite and add focused coverage
    for the changed behavior. Keep all bot tests under
-   `bots/nova_isr_music_bot/tests/`. If no tests exist, report that gap rather
-   than treating compilation alone as test coverage.
+   `bots/nova_isr_music_bot/tests/test_e2e.py`. If the suite is unavailable,
+   report that gap rather than treating compilation alone as test coverage.
 7. Run focused validation after changes. Prefer:
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`

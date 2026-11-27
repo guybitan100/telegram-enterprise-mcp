@@ -1,8 +1,11 @@
 import asyncio
+import json
 import os
 import sqlite3
+import struct
 import unittest
 from types import SimpleNamespace
+from pathlib import Path
 
 
 # The real handler module validates configuration at import time. Use harmless
@@ -13,6 +16,9 @@ os.environ["ADMIN_ID"] = "1"
 from infra import bot as app
 
 
+BOT_ROOT = Path(__file__).resolve().parents[1]
+
+
 class FakeStartMessage:
     def __init__(self):
         self.from_user = SimpleNamespace(id=42)
@@ -20,6 +26,7 @@ class FakeStartMessage:
         self.photo_caption = None
         self.audio = None
         self.audio_caption = None
+        self.text = None
         self.reply_markup = None
 
     async def answer_photo(self, photo, *, caption, reply_markup=None):
@@ -35,7 +42,7 @@ class FakeStartMessage:
         self.reply_markup = reply_markup
 
     async def answer(self, text, *, reply_markup=None):
-        self.audio_caption = text
+        self.text = text
         self.reply_markup = reply_markup
 
 
@@ -51,6 +58,7 @@ class StartFlowE2ETests(unittest.TestCase):
                 id INTEGER PRIMARY KEY,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
+                campaign TEXT NOT NULL DEFAULT '',
                 cover TEXT,
                 full TEXT NOT NULL,
                 preview TEXT NOT NULL,
@@ -90,19 +98,18 @@ class StartFlowE2ETests(unittest.TestCase):
     def tearDownClass(cls):
         app.db.close()
 
-    def test_start_command_builds_one_protected_preview_with_reactions(self):
+    def test_start_command_builds_full_song_menu(self):
         message = FakeStartMessage()
 
         asyncio.run(app.start(message))
 
-        self.assertIsNotNone(message.photo)
-        self.assertIn("NOVA ISR ∞ Music Store", message.photo_caption)
-        self.assertIsNotNone(message.audio)
-        self.assertTrue(message.protect_content)
-        self.assertEqual(len(message.audio_caption.splitlines()), 3)
+        self.assertIsNone(message.photo)
+        self.assertIn("NOVA ISR ∞ Music Store", message.text)
+        self.assertIsNone(message.audio)
         labels = [button.text for row in message.reply_markup.inline_keyboard for button in row]
-        self.assertIn("❤️ 0", labels)
-        self.assertIn("Next ⏭", labels)
+        self.assertIn("Aatini Turha Sharrahni", labels)
+        self.assertIn("Second Preview", labels)
+        self.assertNotIn("Next ⏭", labels)
         self.assertNotIn("My purchases", labels)
 
     def test_reaction_toggles_and_updates_count(self):
@@ -131,6 +138,45 @@ class StartFlowE2ETests(unittest.TestCase):
 
         asyncio.run(app.react(query))
         self.assertEqual(app.db.execute("SELECT count(*) FROM reactions").fetchone()[0], 0)
+
+    def test_reaction_for_missing_track_is_rejected(self):
+        class FakeQuery:
+            data = "react:999:heart"
+            from_user = SimpleNamespace(id=42)
+
+            async def answer(self, text=None, **kwargs):
+                self.answer_text = text
+
+        query = FakeQuery()
+        asyncio.run(app.react(query))
+        self.assertEqual(query.answer_text, "Track unavailable.")
+        self.assertEqual(app.db.execute("SELECT count(*) FROM reactions").fetchone()[0], 0)
+
+    def test_catalog_campaigns_and_metadata_are_complete(self):
+        catalog = json.loads((BOT_ROOT / "catalog.json").read_text(encoding="utf-8"))
+
+        self.assertGreater(len(catalog), 0)
+        self.assertEqual(len({item["file"] for item in catalog}), len(catalog))
+        for item in catalog:
+            self.assertTrue(item["file"].endswith(".mp3"))
+            self.assertTrue(item["title"])
+            self.assertTrue(item["description"])
+            self.assertEqual(len(item["campaign"]), 3)
+            self.assertTrue(all(line.strip() for line in item["campaign"]))
+
+    def test_title_and_callback_presentation_helpers(self):
+        self.assertEqual(app.display_title("aatini turha sharrahni"), "Aatini Turha Sharrahni")
+        self.assertEqual(app.display_title("girls, boys, everybody"), "Girls, Boys, Everybody")
+        self.assertEqual(app.id_from_callback("t:12", "t:"), 12)
+        self.assertIsNone(app.id_from_callback("d:12", "t:"))
+        self.assertIsNone(app.id_from_callback("t:not-a-number", "t:"))
+
+    def test_logo_asset_is_a_square_png(self):
+        logo = (BOT_ROOT / "logo.png").read_bytes()
+        self.assertEqual(logo[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = struct.unpack(">II", logo[16:24])
+        self.assertEqual(width, height)
+        self.assertGreater(width, 0)
 
 
 if __name__ == "__main__":

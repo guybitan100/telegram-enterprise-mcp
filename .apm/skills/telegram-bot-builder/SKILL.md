@@ -7,11 +7,10 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 
 1. Inspect the repository, `git status`, runtime, and existing tests before
    editing. Keep changes within the requested scope.
-2. Testing is a hard gate: before every bot update, run the existing focused
-   tests and record the baseline result. After every update, rerun the same
-   tests and add focused coverage for changed behavior. Keep all bot tests in
-   `bots/nova_isr_music_bot/tests/`; never place tests in runtime/data folders
-   or at the repository root.
+2. Testing is a hard gate: before every bot update, run the single offline E2E
+   suite at `bots/nova_isr_music_bot/tests/test_e2e.py` and record the baseline
+   result. After every update, rerun it and add coverage for changed behavior.
+   Never place tests in runtime/data folders or at the repository root.
 3. Never request or print `TELEGRAM_BOT_TOKEN`. Use local environment variables
    or a secret manager; do not commit `.env`, databases, media, or credentials.
    Keep generated previews and cached cover art under ignored bot data paths.
@@ -32,24 +31,25 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 
 For the NOVA music bot public experience:
 
-1. Show one catalog track at a time; do not render the full song list as the
-   primary menu.
+1. Render all catalog titles as the primary menu; open only the selected track
+   after the user chooses a title.
 2. Send only the generated 30-second preview with `protect_content=True`.
    Never send the full MP3 through a public callback, purchase flow, or stale
    inline button.
-3. Use exactly three short campaign lines per preview, then provide previous,
-   next, and restart navigation as available.
+3. Use exactly three short campaign lines per preview. Do not add automatic
+   next/previous navigation to the preview message.
 4. Provide reaction buttons with server-counted per-track totals. Toggle by
    `(user, track, reaction)` under the existing SQLite mutation lock; never
    accept client-supplied counts.
-5. Cover the preview-only and reaction flows with offline tests under
-   `bots/nova_isr_music_bot/tests/`; do not use live Telegram or real payments.
+5. Cover catalog, preview-only, reaction, and presentation flows in the single
+   offline E2E suite at `bots/nova_isr_music_bot/tests/test_e2e.py`; do not use
+   live Telegram or real payments.
 
 ## NOVA music catalog and Suno metadata
 
 1. Treat `bots/nova_isr_music_bot/catalog.json` as display metadata for the
-   local MP3 library. Keep titles normalized, descriptions concise, and cover
-   URLs optional.
+   local MP3 library. Keep titles normalized, descriptions concise, campaigns
+   exactly three lines, and cover URLs optional.
    Apply full title case only at the presentation boundary; do not rename
    normalized MP3 filenames or storage keys for menu formatting.
 2. Use Suno MCP only when the user explicitly requests metadata, analysis,
@@ -68,8 +68,9 @@ For the NOVA music bot public experience:
    catalog files.
 7. Validate `catalog.json`, compile Python, check shell syntax, and inspect the
    resulting SQLite track count and cover paths when changing catalog behavior.
-8. Validate `bots/nova_isr_music_bot/logo.png` as a readable PNG and keep the
-   welcome flow text-safe when the logo is missing.
+8. Validate `bots/nova_isr_music_bot/logo.png` as a readable PNG for BotFather
+   branding. Do not send it in `/start`; use the selected catalog track's
+   cached Suno cover as the preview thumbnail.
 
 ## Bulk local MP3 ingestion
 
@@ -90,5 +91,5 @@ When the user asks to upload or publish all local MP3 files into the NOVA bot:
    it. Never bypass the private-admin authorization check.
 6. Report exact counts for source files, indexed tracks, previews, and covers;
    do not claim Telegram delivery when only local indexing was performed.
-7. Keep the tracked `logo.png` at the bot root and use it only as a welcome
-   presentation asset; do not copy it into ignored runtime data.
+7. Keep the tracked `logo.png` at the bot root for BotFather branding; do not
+   copy it into ignored runtime data or send it as the bot's welcome message.

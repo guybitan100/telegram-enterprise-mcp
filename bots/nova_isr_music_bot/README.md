@@ -35,7 +35,9 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 - `infra/auth.py`: private admin authorization checks.
 - `infra/config.py`: environment loading and validated runtime configuration.
 - `catalog.json`: local MP3 titles, descriptions, and optional Suno cover metadata.
-- `logo.png`: welcome image shown with the music menu.
+- `logo.png`: canonical bot branding asset, used in the `/start` welcome
+  message and as the BotFather profile icon.
+- `tests/`: focused bot tests; keep bot tests in this directory.
 - `data/covers/`: downloaded cover art and generated previews; ignored by Git.
 
 ## Usage
@@ -51,6 +53,22 @@ At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
 Suno cover art is cached locally when available. Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.
+
+Before changing bot code or behavior, run the focused tests under `tests/` and
+record the baseline. Rerun them after the change. Tests must not require `.env`,
+live Telegram access, customer media, or the local runtime database.
+
+## Bot icon
+
+Set the Telegram profile icon manually in **@BotFather**:
+
+1. Send `/setuserpic`.
+2. Select `@NovaISRMusicBot`.
+3. Upload `logo.png` from this directory.
+
+Telegram does not provide a supported Bot API method for changing a bot's
+profile photo at runtime. Keep the BotFather icon and the tracked
+`logo.png` synchronized when branding changes.
 
 Payment validation checks the order owner, currency, stored amount, pending
 state, and track existence before accepting payment. Duplicate charges are

@@ -24,6 +24,9 @@ Read the relevant files before reviewing:
 - `.apm/skills/telegram-bot-builder/SKILL.md` for Telegram safety rules.
 - `bots/nova_isr_music_bot/README.md`, `catalog.json`, and its `infra/` modules
   for bot behavior and local catalog ownership.
+- `bots/nova_isr_music_bot/tests/` for focused bot tests. Tests must remain
+  inside the bot directory and must never depend on `.env`, live Telegram,
+  customer media, or the local runtime database.
 - `apm.yml`, `.apm/agents/`, `.apm/skills/`, and `.apm/instructions/` for
   package structure and front matter.
 
@@ -137,14 +140,19 @@ values, tokens, customer media, or database contents.
    reporting it.
 5. If fixes are requested, make the smallest change at the responsible layer;
    do not weaken tests, remove safety gates, or redesign unrelated behavior.
-6. Run focused validation after changes. Prefer:
+6. Before changing bot code, run the existing focused tests and record the
+   baseline. After changes, rerun the baseline suite and add focused coverage
+   for the changed behavior. Keep all bot tests under
+   `bots/nova_isr_music_bot/tests/`. If no tests exist, report that gap rather
+   than treating compilation alone as test coverage.
+7. Run focused validation after changes. Prefer:
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`
    - `python -m pytest -q` when pytest is installed
    - `python3 -m json.tool bots/nova_isr_music_bot/catalog.json`
    - `git diff --check`
    - a tracked-path and stale-reference check after renames
-7. Never start polling, call live Telegram APIs, test real payments, or expose
+8. Never start polling, call live Telegram APIs, test real payments, or expose
    secrets as part of a normal review. Report those checks as unperformed.
 
 ## Report format

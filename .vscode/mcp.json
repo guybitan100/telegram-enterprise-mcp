@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "suno": {
+      "type": "http",
+      "url": "https://api.suno.com/mcp"
+    }
+  }
+}

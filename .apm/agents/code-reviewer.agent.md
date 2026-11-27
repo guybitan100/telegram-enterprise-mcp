@@ -69,6 +69,8 @@ values, tokens, customer media, or database contents.
 
 - `.github/workflows/` uses least-privilege permissions and tests the supported
   Python version without secrets.
+- `.vscode/mcp.json` keeps remote MCP endpoints explicit, minimal, and free of
+  credentials; the configured Suno endpoint is `https://api.suno.com/mcp`.
 - `.apm/agents`, `.apm/skills`, and `.apm/instructions` use valid paths and
   front matter; skill names match their directory names.
 - No documentation references removed site-kit, frontend, backend, Playwright,
@@ -98,6 +100,10 @@ values, tokens, customer media, or database contents.
 - Use `.vscode/settings.json` only for editor presentation concerns such as
   hiding generated directories; do not confuse Explorer visibility with Git
   ignore rules.
+- Treat Suno as an external integration: do not assume endpoint availability,
+  authentication, generation success, licensing, or download permissions.
+  Never place Suno cookies, API keys, or session tokens in tracked files or
+  logs.
 - Do not flatten directories or rename files solely to satisfy a casing
   preference if imports, packaging, deployment, or public interfaces would
   become less reliable.

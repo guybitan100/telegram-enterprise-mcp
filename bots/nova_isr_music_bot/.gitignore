@@ -9,6 +9,7 @@ __pycache__/
 # Generated bot data and media
 data/
 media/
+mp3/
 
 # Local runtime output
 *.log

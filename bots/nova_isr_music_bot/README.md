@@ -28,6 +28,13 @@ LOG_LEVEL=INFO
 The bot loads `.env` relative to `bot.py`, so it can be launched from any
 working directory. Never commit `.env`, `data/store.db`, or media files.
 
+## Layout
+
+- `bot.py`: minimal launcher kept at the bot root for setup compatibility.
+- `infra/bot.py`: public Telegram handlers, catalog, delivery, and payment flow.
+- `infra/auth.py`: private admin authorization checks.
+- `infra/config.py`: environment loading and validated runtime configuration.
+
 ## Usage
 
 Keep one polling instance running per token. Send `/admin` privately as the

@@ -10,6 +10,11 @@ template. Find concrete risks, explain their impact, and propose the smallest
 safe correction. Review first; modify files only when the caller explicitly
 asks you to fix or optimize findings. Never commit or push unless asked.
 
+When the caller asks to organize or optimize the repository, inspect the whole
+tree before changing it. Treat organization as an engineering concern: keep a
+clear hierarchy, consistent naming, predictable ownership, and no accidental
+runtime behavior changes.
+
 ## Read first
 
 Read the relevant files before reviewing:
@@ -17,7 +22,7 @@ Read the relevant files before reviewing:
 - `README.md` for the MCP contract and production limitations.
 - `.apm/instructions/repository.instructions.md` for repository guardrails.
 - `.apm/skills/telegram-bot-builder/SKILL.md` for Telegram safety rules.
-- `bots/NOVA_ISR_Music_Bot/README.md` and its `bot.py` for bot behavior.
+- `bots/nova_isr_music_bot/README.md` and its `bot.py` for bot behavior.
 - `apm.yml`, `.apm/agents/`, `.apm/skills/`, and `.apm/instructions/` for
   package structure and front matter.
 
@@ -69,21 +74,54 @@ values, tokens, customer media, or database contents.
 - No documentation references removed site-kit, frontend, backend, Playwright,
   AWS, or other unrelated components.
 
+### Repository organization and naming
+
+- Use lowercase `snake_case` for project-owned Python packages, application
+  directories, and implementation files where the surrounding ecosystem does
+  not require another convention.
+- Preserve conventional ecosystem names and casing when they are meaningful:
+  `.github`, `.vscode`, `.apm`, `README.md`, `Dockerfile`, `SKILL.md`, and
+  other tool-defined filenames should not be renamed for cosmetic reasons.
+- Keep the hierarchy intentional: top-level runtime code, tests, bot
+  applications, infrastructure modules, APM assets, and CI configuration each
+  belong in their appropriate directory.
+- Keep public entrypoints small and place configuration, authentication, and
+  infrastructure concerns in owned modules rather than duplicating them across
+  handlers.
+- Detect stale references after renames, including mixed-case paths, old bot
+  names, imports, documentation links, CI paths, and setup scripts.
+- Treat case-only renames carefully on case-insensitive filesystems; verify the
+  final Git index path, not only the visible working-tree path.
+- Generated artifacts and local-only data such as `__pycache__`, `.venv`,
+  `.env`, databases, media, and APM module caches must be ignored recursively
+  and must not be committed.
+- Use `.vscode/settings.json` only for editor presentation concerns such as
+  hiding generated directories; do not confuse Explorer visibility with Git
+  ignore rules.
+- Do not flatten directories or rename files solely to satisfy a casing
+  preference if imports, packaging, deployment, or public interfaces would
+  become less reliable.
+
 ## Process
 
-1. Capture `git status --short` and inspect the diff or requested files.
+1. Capture `git status --short`, list the repository hierarchy, and inspect the
+   diff or requested files.
 2. Establish the narrow review scope and separate confirmed findings from
    hypotheses.
-3. Trace each finding to its owning code path and check tests or callers before
+3. For organization requests, map each directory and file to an owner,
+   casing convention, and purpose before moving anything. Search all tracked
+   files for references before and after renames.
+4. Trace each finding to its owning code path and check tests or callers before
    reporting it.
-4. If fixes are requested, make the smallest change at the responsible layer;
+5. If fixes are requested, make the smallest change at the responsible layer;
    do not weaken tests, remove safety gates, or redesign unrelated behavior.
-5. Run focused validation after changes. Prefer:
-   - `python3 -m py_compile bots/NOVA_ISR_Music_Bot/bot.py`
-   - `bash -n bots/NOVA_ISR_Music_Bot/setup.sh`
+6. Run focused validation after changes. Prefer:
+   - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
+   - `bash -n bots/nova_isr_music_bot/setup.sh`
    - `python -m pytest -q` when pytest is installed
    - `git diff --check`
-6. Never start polling, call live Telegram APIs, test real payments, or expose
+   - a tracked-path and stale-reference check after renames
+7. Never start polling, call live Telegram APIs, test real payments, or expose
    secrets as part of a normal review. Report those checks as unperformed.
 
 ## Report format

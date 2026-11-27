@@ -44,3 +44,23 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
    catalog files.
 7. Validate `catalog.json`, compile Python, check shell syntax, and inspect the
    resulting SQLite track count and cover paths when changing catalog behavior.
+
+## Bulk local MP3 ingestion
+
+When the user asks to upload or publish all local MP3 files into the NOVA bot:
+
+1. Read the catalog and scan only the configured `mp3/nova_isr/` directory.
+   Never recurse into `.env`, `.venv`, databases, caches, or unrelated media.
+2. Start the bot or run its normal startup sync. The sync copies full tracks,
+   generates midpoint previews with FFmpeg, and upserts rows by SHA-256 hash.
+3. Confirm every catalog entry has a readable full file and preview. Confirm
+   cover paths only when cover art was actually downloaded; missing cover art
+   must not block the rest of the catalog.
+4. Treat “uploaded to the bot” as local catalog publication unless Telegram
+   message delivery was explicitly requested. A bot cannot impersonate the
+   admin user to send incoming audio messages to itself.
+5. For actual Telegram message uploads, require the configured private admin
+   account to send the audio, then let the authenticated upload handler process
+   it. Never bypass the private-admin authorization check.
+6. Report exact counts for source files, indexed tracks, previews, and covers;
+   do not claim Telegram delivery when only local indexing was performed.

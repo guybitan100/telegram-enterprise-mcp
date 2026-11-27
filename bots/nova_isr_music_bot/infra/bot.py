@@ -473,7 +473,20 @@ async def send_preview_video(
     video = Path(row["preview_video"]) if row["preview_video"] else None
     paid_video = Path(row["paid_video"]) if row["paid_video"] else None
     caption = promotional_caption(row)
-    markup = preview_keyboard(row["id"], user_id)
+    markup = preview_media_keyboard(row["id"], user_id)
+    if video and video.is_file():
+        await message.answer_video(
+            FSInputFile(video),
+            duration=PREVIEW_SECONDS,
+            width=720,
+            height=720,
+            caption=caption,
+            thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
+            supports_streaming=True,
+            protect_content=True,
+            reply_markup=markup,
+        )
+        return
     if paid_video and paid_video.is_file():
         await message.answer_paid_media(
             star_count=PRICE_STARS,
@@ -490,20 +503,7 @@ async def send_preview_video(
             payload=f"paid:{row['id']}",
             caption=caption,
             protect_content=True,
-            reply_markup=markup,
-        )
-        return
-    if video and video.is_file():
-        await message.answer_video(
-            FSInputFile(video),
-            duration=PREVIEW_SECONDS,
-            width=720,
-            height=720,
-            caption=caption,
-            thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
-            supports_streaming=True,
-            protect_content=True,
-            reply_markup=markup,
+            reply_markup=preview_keyboard(row["id"], user_id),
         )
         return
     await message.answer_audio(

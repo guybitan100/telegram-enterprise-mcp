@@ -22,15 +22,14 @@ but format user-facing labels with full title case. Keep the tracked
 inside the bot. Use each catalog entry's cached Suno cover as its preview
 thumbnail.
 
-The public music flow uses Telegram paid media: `/start` and `/music` send every
-available catalog track automatically, with no song-selection menu. Send the
-full MP4/audio track as paid media with its catalog cover so Telegram renders
-the locked preview and native `Unlock` Stars flow in the same message. After
-payment Telegram reveals the media; record `purchased_paid_media` payloads so
-the existing authorized download path can recognize the purchase. Keep the
-legacy invoice flow only for older preview messages. Each post may include
-per-track reaction buttons and counters; reaction toggles must be idempotent
-per user, track, and reaction.
+The public music flow sends a playable, protected 30-second MP4 preview for
+every catalog track from `/start` and `/music`, with no song-selection menu.
+Attach the Telegram Stars purchase button to that same preview; the callback
+may create one validated invoice message for the full track. Paid Media is
+only a fallback when a playable preview cannot be generated, because Telegram
+does not make locked paid-media previews playable before purchase. Each post
+may include per-track reaction buttons and counters; reaction toggles must be
+idempotent per user, track, and reaction.
 
 When a user lacks enough Stars, let Telegram open its native Stars top-up
 screen. Do not build a custom card/ILS checkout or pretend the bot controls

@@ -45,10 +45,11 @@ values, tokens, customer media, or database contents.
 - Chat allowlists, dry-run defaults, explicit write gates, and refund guards
   remain intact in the MCP.
 - Paid media and original files are not exposed before successful payment.
-- The public music flow uses Telegram paid media for the full MP4/audio track;
-  Telegram keeps it locked until Stars payment and emits a
-  `purchased_paid_media` update. Stale or unauthenticated callbacks must never
-  bypass payment. Legacy invoice delivery remains server-validated.
+- The public music flow must keep the 30-second MP4 preview playable. The same
+  preview carries a Telegram Stars purchase button; the callback creates only a
+  validated invoice. Paid Media is fallback-only because its locked preview is
+  not playable before purchase. Stale or unauthenticated callbacks must never
+  bypass payment.
 - If the buyer lacks Stars, Telegram's native top-up screen must open. Do not
   add a custom card/ILS payment provider or hard-code Telegram's top-up
   packages; only the per-track `PRICE_STARS` value belongs to the bot.
@@ -85,11 +86,11 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` send all available Telegram paid-media MP4 tracks
-  directly, without a song-selection menu or a second-message payment
-  callback. Telegram's native `Unlock` flow reveals the paid media in the same
-  message; each post has its catalog cover and exactly three campaign-caption
-  lines.
+- `/start` and `/music` send all available 30-second MP4 previews directly,
+  without a song-selection menu or a second-message play callback. Telegram's
+  native player must be able to play the preview in the same message; each
+  post has its catalog cover, Stars purchase button, and exactly three
+  campaign-caption lines.
 
 ### CI and APM packaging
 

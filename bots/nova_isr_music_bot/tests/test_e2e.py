@@ -144,17 +144,19 @@ class StartFlowE2ETests(unittest.TestCase):
         with patch("infra.bot.Path.is_file", return_value=True):
             asyncio.run(app.start(message))
 
-        self.assertEqual(len(message.videos), 0)
+        self.assertEqual(len(message.videos), 2)
         self.assertIn("NOVA ISR ∞ Music Store", message.text)
         self.assertTrue(all(item["protect_content"] for item in message.videos))
         self.assertTrue(all(item["supports_streaming"] for item in message.videos))
         self.assertTrue(all(item["duration"] == 30 for item in message.videos))
-        self.assertEqual(len(message.paid_media), 2)
-        self.assertEqual([item["star_count"] for item in message.paid_media], [50, 50])
-        self.assertEqual(
-            [item["payload"] for item in message.paid_media], ["paid:2", "paid:1"]
-        )
-        self.assertTrue(all(item["protect_content"] for item in message.paid_media))
+        self.assertEqual(len(message.paid_media), 0)
+        self.assertEqual([item["duration"] for item in message.videos], [30, 30])
+        self.assertTrue(all(item["supports_streaming"] for item in message.videos))
+        buy_buttons = [
+            item["reply_markup"].inline_keyboard[0][0].text
+            for item in message.videos
+        ]
+        self.assertEqual(buy_buttons, ["⬇️ Buy full song • 50⭐"] * 2)
         self.assertFalse(message.audios)
         self.assertIsNone(message.menu_reply_markup)
 

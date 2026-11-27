@@ -8,6 +8,8 @@ server, not a generic bot template or a deployed service.
 
 - [`agents/telegram-engineer.agent.md`](./agents/telegram-engineer.agent.md):
   production-oriented Telegram MCP agent.
+- [`agents/code-reviewer.agent.md`](./agents/code-reviewer.agent.md): focused
+  security and correctness reviewer for the MCP and NOVA bot.
 - [`skills/telegram-bot-builder/SKILL.md`](./skills/telegram-bot-builder/SKILL.md):
   implementation and safety workflow.
 - [`instructions/repository.instructions.md`](./instructions/repository.instructions.md):

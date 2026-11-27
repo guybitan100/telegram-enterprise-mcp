@@ -58,6 +58,12 @@ Before changing bot code or behavior, run the focused tests under `tests/` and
 record the baseline. Rerun them after the change. Tests must not require `.env`,
 live Telegram access, customer media, or the local runtime database.
 
+Run the offline sanity suite with:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+```
+
 ## Bot icon
 
 Set the Telegram profile icon manually in **@BotFather**:

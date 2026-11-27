@@ -32,6 +32,7 @@ from .config import (
     PRICE_STARS,
     SUPPORT_HANDLE,
 )
+from .presentation import display_title, id_from_callback
 
 
 logging.basicConfig(level=LOG_LEVEL)
@@ -96,27 +97,26 @@ def keyboard(rows: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     )
 
 
-def id_from_callback(data: str, prefix: str) -> int | None:
-    try:
-        if not data.startswith(prefix):
-            return None
-        return int(data[len(prefix) :])
-    except ValueError:
-        return None
-
-
 def get_track(track_id: int) -> sqlite3.Row | None:
     return db.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
-
-
-def display_title(title: str) -> str:
-    return title.title()
 
 
 def track_caption(row: sqlite3.Row) -> str:
     description = (row["description"] or "").strip()
     title = display_title(row["title"])
     return f"{title}\n\n{description}"[:1024] if description else title
+
+
+def promotional_caption(row: sqlite3.Row) -> str:
+    """Return a compact three-line campaign caption for a preview."""
+    title = display_title(row["title"])
+    description = " ".join((row["description"] or "").split())
+    description = description[:150].rstrip(" .,;:-") or "Feel the sound."
+    return (
+        f"🎵 {title}\n"
+        f"🔥 {description}\n"
+        f"▶️ {PREVIEW_SECONDS}-second preview • Listen now"
+    )
 
 
 def build_preview(source: Path, preview: Path) -> None:
@@ -304,23 +304,43 @@ async def deliver(chat_id: int, user_id: int, track_id: int) -> None:
     await bot.send_document(chat_id, FSInputFile(full), caption=track_caption(row))
 
 
+def navigation_keyboard(rows: list[sqlite3.Row], index: int) -> InlineKeyboardMarkup:
+    buttons: list[tuple[str, str]] = []
+    if index > 0:
+        buttons.append(("⏮ Previous", f"prev:{rows[index - 1]['id']}"))
+    if index + 1 < len(rows):
+        buttons.append(("Next ⏭", f"next:{rows[index + 1]['id']}"))
+    else:
+        buttons.append(("Restart 🔄", "restart"))
+    return keyboard(buttons)
+
+
+async def send_preview(message: Message, row: sqlite3.Row, rows: list[sqlite3.Row]) -> None:
+    index = next(i for i, candidate in enumerate(rows) if candidate["id"] == row["id"])
+    cover = Path(row["cover"]) if row["cover"] else None
+    await message.answer_audio(
+        FSInputFile(row["preview"]),
+        title=f"{display_title(row['title'])} (30s Preview)",
+        performer="NOVA ISR",
+        caption=promotional_caption(row),
+        thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
+        protect_content=True,
+        reply_markup=navigation_keyboard(rows, index),
+    )
+
+
 @dp.message(Command("start", "music"))
 async def start(message: Message) -> None:
     rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    buttons = [(display_title(row["title"])[:45], f"t:{row['id']}") for row in rows]
-    buttons.append(("My purchases", "purchases"))
-    caption = (
-        f"NOVA ISR ∞ Music Store\n"
-        f"Free {PREVIEW_SECONDS}-second previews • Full MP3: {PRICE_STARS} ⭐"
-    )
+    if not rows:
+        await message.answer("No previews are available right now.")
+        return
     if LOGO_FILE.is_file():
         await message.answer_photo(
             FSInputFile(LOGO_FILE),
-            caption=caption,
-            reply_markup=keyboard(buttons),
+            caption="NOVA ISR ∞ Music Store\n30-second previews only",
         )
-    else:
-        await message.answer(caption, reply_markup=keyboard(buttons))
+    await send_preview(message, rows[0], rows)
 
 
 @dp.callback_query(F.data == "purchases")
@@ -345,53 +365,47 @@ async def show(query: CallbackQuery) -> None:
     if not row or not Path(row["preview"]).is_file():
         await query.message.answer("Track unavailable.")
         return
-    owned = is_owned(query.from_user.id, row["id"])
-    await query.message.answer_audio(
-        FSInputFile(row["preview"]),
-        title=f"{display_title(row['title'])} (Preview)",
-        performer="NOVA ISR",
-        caption=track_caption(row),
-        thumbnail=FSInputFile(row["cover"]) if row["cover"] else None,
-        reply_markup=keyboard(
-            [
-                (
-                    "Download full MP3" if owned else f"Buy full MP3 • {PRICE_STARS} ⭐",
-                    f"{'d' if owned else 'b'}:{row['id']}",
-                )
-            ]
-        ),
-    )
+    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
+    await send_preview(query.message, row, rows)
+
+
+async def navigate(query: CallbackQuery, prefix: str) -> None:
+    await query.answer()
+    track_id = id_from_callback(query.data, prefix)
+    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
+    row = get_track(track_id) if track_id is not None else None
+    if not row or not rows:
+        await query.message.answer("Preview unavailable.")
+        return
+    await send_preview(query.message, row, rows)
+
+
+@dp.callback_query(F.data.startswith("next:"))
+async def next_preview(query: CallbackQuery) -> None:
+    await navigate(query, "next:")
+
+
+@dp.callback_query(F.data.startswith("prev:"))
+async def previous_preview(query: CallbackQuery) -> None:
+    await navigate(query, "prev:")
+
+
+@dp.callback_query(F.data == "restart")
+async def restart(query: CallbackQuery) -> None:
+    await query.answer()
+    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
+    if rows:
+        await send_preview(query.message, rows[0], rows)
 
 
 @dp.callback_query(F.data.startswith("d:"))
 async def download(query: CallbackQuery) -> None:
-    await query.answer()
-    track_id = id_from_callback(query.data, "d:")
-    if track_id is not None:
-        await deliver(query.from_user.id, query.from_user.id, track_id)
+    await query.answer("Full downloads are disabled. Only 30-second previews are available.", show_alert=True)
 
 
 @dp.callback_query(F.data.startswith("b:"))
 async def buy(query: CallbackQuery) -> None:
-    await query.answer()
-    user_id = query.from_user.id
-    track_id = id_from_callback(query.data, "b:")
-    row = get_track(track_id) if track_id is not None else None
-    if not row:
-        return
-    if is_owned(user_id, track_id):
-        await deliver(user_id, user_id, track_id)
-        return
-    order = await pending_order(user_id, track_id)
-    await bot.send_invoice(
-        user_id,
-        title=display_title(row["title"])[:32],
-        description=(row["description"] or "Original MP3 download")[:255],
-        payload=order["id"],
-        currency="XTR",
-        prices=[LabeledPrice(label="Full MP3", amount=order["amount"])],
-        provider_token="",
-    )
+    await query.answer("Downloads are disabled. Only 30-second previews are available.", show_alert=True)
 
 
 @dp.pre_checkout_query()

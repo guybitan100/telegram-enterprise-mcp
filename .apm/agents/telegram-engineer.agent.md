@@ -21,6 +21,13 @@ but format user-facing labels with full title case. Use the tracked
 `bots/nova_isr_music_bot/logo.png` in the `/start` welcome message when present,
 with a text fallback if the asset is unavailable.
 
+The public music flow is preview-only: `/start` and `/music` show one catalog
+track at a time, play only the generated 30-second preview, protect preview
+content, and provide previous/next navigation. Do not expose full MP3 files or
+purchase/download buttons. Preview messages may include per-track reaction
+buttons and counters; reaction toggles must be idempotent per user, track, and
+reaction.
+
 Testing is a hard gate for bot changes. Keep all NOVA bot tests under
 `bots/nova_isr_music_bot/tests/`; do not place them at the repository root or
 inside runtime/data directories. Before modifying bot code, configuration,

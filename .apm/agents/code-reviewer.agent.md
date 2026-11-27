@@ -45,6 +45,11 @@ values, tokens, customer media, or database contents.
 - Chat allowlists, dry-run defaults, explicit write gates, and refund guards
   remain intact in the MCP.
 - Paid media and original files are not exposed before successful payment.
+- The public music flow never exposes full MP3 files, including through stale
+  callbacks or legacy purchase paths; only protected 30-second previews are
+  sent.
+- Preview reaction callbacks validate the track and reaction key, toggle one
+  user reaction idempotently, and update counts without trusting client totals.
 - File paths are local, predictable, and cannot be supplied by untrusted users.
 - Logs and errors do not disclose tokens, payment details, or private media.
 
@@ -76,6 +81,9 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The bot welcome flow uses the checked-in `logo.png` only when it exists and
   falls back to text without making startup dependent on the asset.
+- `/start` and `/music` present one preview at a time, with exactly three
+  campaign-caption lines and bounded previous/next navigation rather than a
+  full song-list menu.
 
 ### CI and APM packaging
 
@@ -148,7 +156,8 @@ values, tokens, customer media, or database contents.
 7. Run focused validation after changes. Prefer:
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`
-   - `python -m pytest -q` when pytest is installed
+   - `cd bots/nova_isr_music_bot && .venv/bin/python -m unittest discover -s tests -p 'test_*.py'`
+   - `python -m pytest -q` when pytest is installed for any repository pytest suite
    - `python3 -m json.tool bots/nova_isr_music_bot/catalog.json`
    - `git diff --check`
    - a tracked-path and stale-reference check after renames

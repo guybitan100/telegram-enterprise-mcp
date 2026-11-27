@@ -28,6 +28,23 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 8. Update the root README when runtime behavior, configuration, or safety
    limitations change. Do not deploy or push without explicit authorization.
 
+## Preview-only music flow
+
+For the NOVA music bot public experience:
+
+1. Show one catalog track at a time; do not render the full song list as the
+   primary menu.
+2. Send only the generated 30-second preview with `protect_content=True`.
+   Never send the full MP3 through a public callback, purchase flow, or stale
+   inline button.
+3. Use exactly three short campaign lines per preview, then provide previous,
+   next, and restart navigation as available.
+4. Provide reaction buttons with server-counted per-track totals. Toggle by
+   `(user, track, reaction)` under the existing SQLite mutation lock; never
+   accept client-supplied counts.
+5. Cover the preview-only and reaction flows with offline tests under
+   `bots/nova_isr_music_bot/tests/`; do not use live Telegram or real payments.
+
 ## NOVA music catalog and Suno metadata
 
 1. Treat `bots/nova_isr_music_bot/catalog.json` as display metadata for the

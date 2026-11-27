@@ -46,17 +46,16 @@ Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
 fade-in/out, and stores the original by SHA-256 content hash. The `/start` and
-`/music` commands send all catalog tracks automatically as static cover cards
-with a centered play symbol, without a song-selection menu. The `▶️ Play 30s`
-button sends the protected MP4 video preview only after an explicit click.
-Each card contains three short campaign lines and reaction buttons with
-per-track counters. The `⬇️ Buy full song` button opens a Telegram Stars invoice;
+`/music` commands send all catalog tracks automatically as 30-second MP4 video
+previews with their Suno covers, without a song-selection menu. Telegram's
+native Play control plays each preview in the same message; autoplay behavior
+is controlled by the Telegram client. Each video contains three short campaign
+lines and reaction buttons with per-track counters. The `⬇️ Buy full song` button opens a Telegram Stars invoice;
 the full MP3 is delivered only after successful server-side payment validation.
 
 At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
-Suno cover art is cached locally and used as each card's visual and each
-video's thumbnail. FFmpeg creates the centered-play poster and video-player
-preview files in the ignored data directory.
+Suno cover art is cached locally and used as each video's thumbnail. FFmpeg
+creates the video-player preview files in the ignored data directory.
 Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.

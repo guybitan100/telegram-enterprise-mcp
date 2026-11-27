@@ -81,10 +81,10 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` send all available static cover cards without a
-  song-selection menu. Each card has a centered play symbol and a `▶️ Play 30s`
-  callback; the protected video preview is sent only after a click and keeps
-  exactly three campaign-caption lines.
+- `/start` and `/music` send all available 30-second MP4 previews directly,
+  without a song-selection menu or a second-message play callback. Telegram's
+  native player controls playback in the same message; each preview has its
+  catalog cover and exactly three campaign-caption lines.
 
 ### CI and APM packaging
 
@@ -158,6 +158,9 @@ values, tokens, customer media, or database contents.
    running, require a graceful restart from the bot directory so `.env` is
    loaded again. Do not print, expose, rotate, or commit the token; token
    replacement remains a manual BotFather operation.
+   Repository owner policy also requires the completed, tested bot change to
+   be committed and pushed to `origin/main`; verify the push and working-tree
+   state before reporting completion.
 7. Run focused validation after changes. Prefer:
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`

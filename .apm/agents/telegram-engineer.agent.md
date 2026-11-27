@@ -24,12 +24,13 @@ thumbnail.
 
 The public music flow is preview-only: `/start` and `/music` send every
 available catalog track automatically, with no song-selection menu. Play only
-static catalog-cover cards with a centered play symbol. Do not autoplay media:
-the `▶️ Play 30s` callback sends the protected 30-second video preview only
-after an explicit click. Full MP3 downloads are available only after a
-validated Telegram Stars payment; never expose them through an unauthenticated
-or stale callback. Each card may include per-track reaction buttons and counters;
-reaction toggles must be idempotent per user, track, and reaction.
+the protected 30-second MP4 directly with its catalog cover, so Telegram's
+native Play control operates on the same message and does not open a second
+preview message. The Bot API does not control client autoplay preferences.
+Full MP3 downloads are available only after a validated Telegram Stars payment;
+never expose them through an unauthenticated or stale callback. Each video may
+include per-track reaction buttons and counters; reaction toggles must be
+idempotent per user, track, and reaction.
 
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at
 `bots/nova_isr_music_bot/tests/test_e2e.py`; do not place tests at the
@@ -38,6 +39,11 @@ configuration, catalog behavior, or bot documentation, run the E2E suite and
 record the baseline result. After the change, run it again with any new
 coverage. Keep it offline: no `.env`, live Telegram, real payments, customer
 media, or local runtime database.
+
+Repository owner completion policy: after every authorized bot update, rerun
+the focused E2E suite, commit the complete change, push to `origin/main`, and
+refresh the running bot from its directory. If the bot is not running, start it
+after the push. Never print or expose secrets during this workflow.
 
 After an authorized update, detect whether the NOVA polling process is already
 running. If it is running, stop it gracefully and restart it from the bot

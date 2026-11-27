@@ -14,6 +14,8 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
    After an authorized update, if the bot is already running, restart it
    gracefully from its bot directory so it reloads `.env`; never print or
    expose the token. Token rotation itself stays a manual BotFather action.
+   After tests pass, commit the bot update and push it to `origin/main`, then
+   verify the push and refresh or start the bot.
 3. Never request or print `TELEGRAM_BOT_TOKEN`. Use local environment variables
    or a secret manager; do not commit `.env`, databases, media, or credentials.
    Keep generated previews and cached cover art under ignored bot data paths.
@@ -34,11 +36,12 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 
 For the NOVA music bot public experience:
 
-1. On `/start` and `/music`, send every available static catalog-cover card in
-   order; do not autoplay media or render a song-selection menu.
-2. Put a centered play symbol on each card and expose a `▶️ Play 30s` callback.
-   Send the generated 30-second MP4 preview only after an explicit click, with
-   `supports_streaming=True` and `protect_content=True`.
+1. On `/start` and `/music`, send every available 30-second MP4 preview in
+   order, with its catalog cover; do not render a song-selection menu or send a
+   second-message play callback.
+2. Let Telegram's native video player control playback in the same message,
+   with `supports_streaming=True` and `protect_content=True`. The Bot API does
+   not control client autoplay preferences.
    Send the full MP3 only after a validated Telegram Stars payment; stale or
    unauthenticated callbacks must never bypass payment.
 3. Use exactly three short campaign lines per preview. Do not add automatic
@@ -76,7 +79,7 @@ For the NOVA music bot public experience:
    resulting SQLite track count and cover paths when changing catalog behavior.
 8. Validate `bots/nova_isr_music_bot/logo.png` as a readable PNG for BotFather
    branding. Do not send it in `/start`; use each catalog track's cached Suno
-   cover as the card visual and video thumbnail.
+   cover as the video thumbnail.
 
 ## Bulk local MP3 ingestion
 

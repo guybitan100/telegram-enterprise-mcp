@@ -5,11 +5,9 @@ import logging
 import secrets
 import shutil
 import sqlite3
-import struct
 import subprocess
 import tempfile
 import urllib.request
-import zlib
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
@@ -57,7 +55,6 @@ db.executescript(
         description TEXT NOT NULL DEFAULT '',
         campaign TEXT NOT NULL DEFAULT '',
         cover TEXT,
-        poster TEXT,
         full TEXT NOT NULL,
         preview TEXT NOT NULL,
         preview_video TEXT,
@@ -90,7 +87,6 @@ for column, definition in (
     ("description", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "TEXT NOT NULL DEFAULT ''"),
     ("cover", "TEXT"),
-    ("poster", "TEXT"),
     ("preview_video", "TEXT"),
 ):
     try:
@@ -230,79 +226,6 @@ def build_preview_video(audio: Path, cover: Path, video: Path) -> None:
     )
 
 
-def build_play_poster(cover: Path, poster: Path) -> None:
-    """Create a static cover card with a centered play symbol."""
-    overlay = DATA_DIR / "play-overlay.png"
-    if not overlay.is_file():
-        write_play_overlay(overlay)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-y",
-            "-i",
-            str(cover),
-            "-i",
-            str(overlay),
-            "-filter_complex",
-            "[0:v]scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2[base];[1:v]format=rgba[play];[base][play]overlay=0:0",
-            "-frames:v",
-            "1",
-            "-q:v",
-            "3",
-            str(poster),
-        ],
-        check=True,
-        timeout=60,
-    )
-
-
-def write_play_overlay(path: Path, size: int = 720) -> None:
-    """Write a dependency-free transparent PNG containing a play symbol."""
-    center = size / 2
-    radius = size * 0.105
-    vertices = (
-        (center - size * 0.04, center - size * 0.065),
-        (center - size * 0.04, center + size * 0.065),
-        (center + size * 0.065, center),
-    )
-
-    def sign(point, first, second):
-        return (point[0] - second[0]) * (first[1] - second[1]) - (first[0] - second[0]) * (point[1] - second[1])
-
-    def in_triangle(x, y):
-        point = (x, y)
-        values = [
-            sign(point, vertices[0], vertices[1]),
-            sign(point, vertices[1], vertices[2]),
-            sign(point, vertices[2], vertices[0]),
-        ]
-        return not (any(value < 0 for value in values) and any(value > 0 for value in values))
-
-    rows = []
-    for y in range(size):
-        row = bytearray([0])
-        for x in range(size):
-            distance = ((x - center) ** 2 + (y - center) ** 2) ** 0.5
-            if in_triangle(x, y):
-                row.extend((255, 255, 255, 255))
-            elif distance <= radius:
-                row.extend((0, 0, 0, 175))
-            else:
-                row.extend((0, 0, 0, 0))
-        rows.append(bytes(row))
-
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-
-    payload = b"\x89PNG\r\n\x1a\n"
-    payload += chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
-    payload += chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
-    payload += chunk(b"IEND", b"")
-    path.write_bytes(payload)
-
-
 def sync_local_catalog() -> None:
     """Publish local MP3s into the catalog using checked-in metadata."""
     if not CATALOG_FILE.is_file():
@@ -323,7 +246,6 @@ def sync_local_catalog() -> None:
             full = DATA_DIR / f"{digest}.mp3"
             preview = DATA_DIR / f"{digest}-preview.mp3"
             preview_video = DATA_DIR / f"{digest}-preview.mp4"
-            poster = DATA_DIR / f"{digest}-poster.jpg"
             if not full.is_file():
                 shutil.copyfile(source, full)
             if not preview.is_file():
@@ -343,18 +265,15 @@ def sync_local_catalog() -> None:
                     cover_path = str(cover)
             if cover_path and not preview_video.is_file():
                 build_preview_video(preview, Path(cover_path), preview_video)
-            if cover_path and not poster.is_file():
-                build_play_poster(Path(cover_path), poster)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, campaign, cover, poster, full, preview, preview_video, hash)
-                VALUES(?,?,?,?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, preview_video, hash)
+                VALUES(?,?,?,?,?,?,?,?)
                 ON CONFLICT(hash) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
                     campaign=excluded.campaign,
                     cover=excluded.cover,
-                    poster=excluded.poster,
                     full=excluded.full,
                     preview=excluded.preview,
                     preview_video=excluded.preview_video
@@ -364,7 +283,6 @@ def sync_local_catalog() -> None:
                     item.get("description", "")[:900],
                     "\n".join(item.get("campaign", []))[:900],
                     cover_path,
-                    str(poster) if poster.is_file() else None,
                     str(full),
                     str(preview),
                     str(preview_video) if preview_video.is_file() else None,
@@ -483,12 +401,11 @@ def preview_keyboard(track_id: int, user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[reaction_row])
 
 
-def preview_card_keyboard(track_id: int, user_id: int) -> InlineKeyboardMarkup:
+def preview_media_keyboard(track_id: int, user_id: int) -> InlineKeyboardMarkup:
     reactions = preview_keyboard(track_id, user_id).inline_keyboard[0]
     owned = is_owned(user_id, track_id)
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="▶️ Play 30s", callback_data=f"play:{track_id}")],
             [
                 InlineKeyboardButton(
                     text="⬇️ Download" if owned else f"⬇️ Buy full song • {PRICE_STARS}⭐",
@@ -506,7 +423,7 @@ async def send_preview_video(
     cover = Path(row["cover"]) if row["cover"] else None
     video = Path(row["preview_video"]) if row["preview_video"] else None
     caption = promotional_caption(row)
-    markup = preview_keyboard(row["id"], user_id)
+    markup = preview_media_keyboard(row["id"], user_id)
     if video and video.is_file():
         await message.answer_video(
             FSInputFile(video),
@@ -531,22 +448,6 @@ async def send_preview_video(
     )
 
 
-async def send_preview_card(
-    message: Message, row: sqlite3.Row, user_id: int
-) -> None:
-    poster = Path(row["poster"]) if row["poster"] else None
-    cover = Path(row["cover"]) if row["cover"] else None
-    if poster and poster.is_file():
-        await message.answer_photo(
-            FSInputFile(poster),
-            caption=promotional_caption(row),
-            protect_content=True,
-            reply_markup=preview_card_keyboard(row["id"], user_id),
-        )
-        return
-    await send_preview_video(message, row, user_id)
-
-
 @dp.message(Command("start", "music"))
 async def start(message: Message) -> None:
     rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
@@ -558,7 +459,7 @@ async def start(message: Message) -> None:
     )
     for row in rows:
         if Path(row["preview"]).is_file():
-            await send_preview_card(message, row, message.from_user.id)
+            await send_preview_video(message, row, message.from_user.id)
 
 
 @dp.callback_query(F.data == "purchases")
@@ -579,17 +480,6 @@ async def purchases(query: CallbackQuery) -> None:
 async def show(query: CallbackQuery) -> None:
     await query.answer()
     track_id = id_from_callback(query.data, "t:")
-    row = get_track(track_id) if track_id is not None else None
-    if not row or not Path(row["preview"]).is_file():
-        await query.message.answer("Track unavailable.")
-        return
-    await send_preview_card(query.message, row, query.from_user.id)
-
-
-@dp.callback_query(F.data.startswith("play:"))
-async def play(query: CallbackQuery) -> None:
-    await query.answer()
-    track_id = id_from_callback(query.data, "play:")
     row = get_track(track_id) if track_id is not None else None
     if not row or not Path(row["preview"]).is_file():
         await query.message.answer("Track unavailable.")

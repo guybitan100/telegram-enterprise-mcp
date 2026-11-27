@@ -32,6 +32,11 @@ legacy invoice flow only for older preview messages. Each post may include
 per-track reaction buttons and counters; reaction toggles must be idempotent
 per user, track, and reaction.
 
+When a user lacks enough Stars, let Telegram open its native Stars top-up
+screen. Do not build a custom card/ILS checkout or pretend the bot controls
+Telegram's 500/1,000/2,500-Star top-up options; the bot controls only the
+track price through `PRICE_STARS`.
+
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at
 `bots/nova_isr_music_bot/tests/test_e2e.py`; do not place tests at the
 repository root or inside runtime/data directories. Before modifying bot code,

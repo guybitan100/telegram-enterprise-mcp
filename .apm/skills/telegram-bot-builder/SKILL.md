@@ -41,13 +41,15 @@ For the NOVA music bot public experience:
    render a song-selection menu or send a second-message payment callback.
 2. Let Telegram render the locked preview and native `Unlock` payment flow in
    the same message. Handle `purchased_paid_media` payloads server-side and
-   keep the legacy invoice path validated for older messages.
+   keep the legacy invoice path validated for older messages. If the user lacks
+   Stars, allow Telegram's native top-up screen to appear; do not implement a
+   custom card/ILS checkout or control Telegram's top-up package choices.
 3. Use exactly three short campaign lines per preview. Do not add automatic
    next/previous navigation to the preview message.
 4. Provide reaction buttons with server-counted per-track totals. Toggle by
    `(user, track, reaction)` under the existing SQLite mutation lock; never
    accept client-supplied counts.
-5. Cover catalog, preview-only, reaction, and presentation flows in the single
+5. Cover catalog, paid-media, reaction, and presentation flows in the single
    offline E2E suite at `bots/nova_isr_music_bot/tests/test_e2e.py`; do not use
    live Telegram or real payments. Cover invoice creation, pre-checkout
    validation, payment idempotency, and download authorization offline.

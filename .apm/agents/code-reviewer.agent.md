@@ -49,6 +49,9 @@ values, tokens, customer media, or database contents.
   Telegram keeps it locked until Stars payment and emits a
   `purchased_paid_media` update. Stale or unauthenticated callbacks must never
   bypass payment. Legacy invoice delivery remains server-validated.
+- If the buyer lacks Stars, Telegram's native top-up screen must open. Do not
+  add a custom card/ILS payment provider or hard-code Telegram's top-up
+  packages; only the per-track `PRICE_STARS` value belongs to the bot.
 - Preview reaction callbacks validate the track and reaction key, toggle one
   user reaction idempotently, and update counts without trusting client totals.
 - File paths are local, predictable, and cannot be supplied by untrusted users.
@@ -56,8 +59,8 @@ values, tokens, customer media, or database contents.
 
 ### Payments and state
 
-- Stars invoices use `XTR`, the stored amount, the intended user, and a stable
-  order identifier.
+- Stars paid media and legacy invoices use `XTR`/Stars, the stored amount, the
+  intended user, and a stable order or paid-media payload identifier.
 - Pre-checkout validates ownership, amount, currency, availability, and
   pending state.
 - Successful payments are idempotent; duplicate or conflicting charges are

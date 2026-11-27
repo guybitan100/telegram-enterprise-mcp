@@ -42,6 +42,7 @@ dp = Dispatcher()
 BOT_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_FILE = BOT_ROOT / "catalog.json"
 LOCAL_TRACK_DIR = BOT_ROOT / "mp3" / "nova_isr"
+LOGO_FILE = BOT_ROOT / "logo.png"
 db = sqlite3.connect(DATA_DIR / "store.db", timeout=30)
 db.row_factory = sqlite3.Row
 db.execute("PRAGMA journal_mode=WAL")
@@ -108,9 +109,14 @@ def get_track(track_id: int) -> sqlite3.Row | None:
     return db.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
 
 
+def display_title(title: str) -> str:
+    return title.title()
+
+
 def track_caption(row: sqlite3.Row) -> str:
     description = (row["description"] or "").strip()
-    return f"{row['title']}\n\n{description}"[:1024] if description else row["title"]
+    title = display_title(row["title"])
+    return f"{title}\n\n{description}"[:1024] if description else title
 
 
 def build_preview(source: Path, preview: Path) -> None:
@@ -301,12 +307,20 @@ async def deliver(chat_id: int, user_id: int, track_id: int) -> None:
 @dp.message(Command("start", "music"))
 async def start(message: Message) -> None:
     rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    buttons = [(row["title"][:45], f"t:{row['id']}") for row in rows]
+    buttons = [(display_title(row["title"])[:45], f"t:{row['id']}") for row in rows]
     buttons.append(("My purchases", "purchases"))
-    await message.answer(
-        f"NOVA ISR ∞ Music Store\nFree {PREVIEW_SECONDS}-second previews • Full MP3: {PRICE_STARS} ⭐",
-        reply_markup=keyboard(buttons),
+    caption = (
+        f"NOVA ISR ∞ Music Store\n"
+        f"Free {PREVIEW_SECONDS}-second previews • Full MP3: {PRICE_STARS} ⭐"
     )
+    if LOGO_FILE.is_file():
+        await message.answer_photo(
+            FSInputFile(LOGO_FILE),
+            caption=caption,
+            reply_markup=keyboard(buttons),
+        )
+    else:
+        await message.answer(caption, reply_markup=keyboard(buttons))
 
 
 @dp.callback_query(F.data == "purchases")
@@ -317,7 +331,9 @@ async def purchases(query: CallbackQuery) -> None:
         "WHERE o.uid=? AND o.paid=1 ORDER BY t.id DESC",
         (query.from_user.id,),
     ).fetchall()
-    markup = keyboard([(row["title"][:45], f"d:{row['id']}") for row in rows])
+    markup = keyboard(
+        [(display_title(row["title"])[:45], f"d:{row['id']}") for row in rows]
+    )
     await query.message.answer("Your purchases", reply_markup=markup if rows else None)
 
 
@@ -332,7 +348,7 @@ async def show(query: CallbackQuery) -> None:
     owned = is_owned(query.from_user.id, row["id"])
     await query.message.answer_audio(
         FSInputFile(row["preview"]),
-        title=f"{row['title']} (Preview)",
+        title=f"{display_title(row['title'])} (Preview)",
         performer="NOVA ISR",
         caption=track_caption(row),
         thumbnail=FSInputFile(row["cover"]) if row["cover"] else None,
@@ -369,7 +385,7 @@ async def buy(query: CallbackQuery) -> None:
     order = await pending_order(user_id, track_id)
     await bot.send_invoice(
         user_id,
-        title=row["title"][:32],
+        title=display_title(row["title"])[:32],
         description=(row["description"] or "Original MP3 download")[:255],
         payload=order["id"],
         currency="XTR",

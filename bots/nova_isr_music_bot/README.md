@@ -35,6 +35,7 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 - `infra/auth.py`: private admin authorization checks.
 - `infra/config.py`: environment loading and validated runtime configuration.
 - `catalog.json`: local MP3 titles, descriptions, and optional Suno cover metadata.
+- `logo.png`: welcome image shown with the music menu.
 - `data/covers/`: downloaded cover art and generated previews; ignored by Git.
 
 ## Usage

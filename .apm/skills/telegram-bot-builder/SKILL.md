@@ -28,6 +28,8 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 1. Treat `bots/nova_isr_music_bot/catalog.json` as display metadata for the
    local MP3 library. Keep titles normalized, descriptions concise, and cover
    URLs optional.
+   Apply full title case only at the presentation boundary; do not rename
+   normalized MP3 filenames or storage keys for menu formatting.
 2. Use Suno MCP only when the user explicitly requests metadata, analysis,
    artwork, upload, or generation. Do not assume a local MP3 upload will be
    accepted; Suno may reject audio for copyright reasons.
@@ -44,6 +46,8 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
    catalog files.
 7. Validate `catalog.json`, compile Python, check shell syntax, and inspect the
    resulting SQLite track count and cover paths when changing catalog behavior.
+8. Validate `bots/nova_isr_music_bot/logo.png` as a readable PNG and keep the
+   welcome flow text-safe when the logo is missing.
 
 ## Bulk local MP3 ingestion
 
@@ -64,3 +68,5 @@ When the user asks to upload or publish all local MP3 files into the NOVA bot:
    it. Never bypass the private-admin authorization check.
 6. Report exact counts for source files, indexed tracks, previews, and covers;
    do not claim Telegram delivery when only local indexing was performed.
+7. Keep the tracked `logo.png` at the bot root and use it only as a welcome
+   presentation asset; do not copy it into ignored runtime data.

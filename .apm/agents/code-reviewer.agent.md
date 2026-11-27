@@ -69,6 +69,10 @@ values, tokens, customer media, or database contents.
   does not silently publish files outside the configured local track directory.
 - Preview generation and cover caching fail safely per track without blocking
   the entire bot from starting.
+- Catalog titles remain normalized in storage while user-facing menus apply
+  full title case consistently; filenames must not be renamed for presentation.
+- The bot welcome flow uses the checked-in `logo.png` only when it exists and
+  falls back to text without making startup dependent on the asset.
 
 ### CI and APM packaging
 
@@ -114,6 +118,8 @@ values, tokens, customer media, or database contents.
   source of fallback descriptions when Suno rejects an upload.
 - Review cover downloads for bounded timeouts, local cache paths, safe file
   names, and no untrusted URL or path interpolation.
+- Review `logo.png` as a non-secret binary asset: validate its format and keep
+  it tracked at the bot root rather than embedding or regenerating it at runtime.
 - Do not flatten directories or rename files solely to satisfy a casing
   preference if imports, packaging, deployment, or public interfaces would
   become less reliable.

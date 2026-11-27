@@ -81,8 +81,8 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` present all catalog titles as menu buttons, while each
-  selected item opens one preview with exactly three campaign-caption lines.
+- `/start` and `/music` send all available previews automatically without a
+  song-selection menu. Each preview has exactly three campaign-caption lines.
 
 ### CI and APM packaging
 

@@ -31,9 +31,9 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 
 For the NOVA music bot public experience:
 
-1. Render all catalog titles as the primary menu; open only the selected track
-   after the user chooses a title.
-2. Send only the generated 30-second preview with `protect_content=True`.
+1. On `/start` and `/music`, send every available catalog preview in order;
+   do not render a song-selection menu.
+2. Send only each generated 30-second preview with `protect_content=True`.
    Never send the full MP3 through a public callback, purchase flow, or stale
    inline button.
 3. Use exactly three short campaign lines per preview. Do not add automatic

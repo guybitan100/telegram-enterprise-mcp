@@ -6,6 +6,7 @@ import struct
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
 
 
 # The real handler module validates configuration at import time. Use harmless
@@ -24,9 +25,9 @@ class FakeStartMessage:
         self.from_user = SimpleNamespace(id=42)
         self.photo = None
         self.photo_caption = None
-        self.audio = None
-        self.audio_caption = None
+        self.audios = []
         self.text = None
+        self.menu_reply_markup = None
         self.reply_markup = None
 
     async def answer_photo(self, photo, *, caption, reply_markup=None):
@@ -35,14 +36,22 @@ class FakeStartMessage:
         self.reply_markup = reply_markup
 
     async def answer_audio(self, audio, *, title, performer, caption, thumbnail, protect_content, reply_markup):
-        self.audio = audio
-        self.audio_caption = caption
+        self.audios.append(
+            {
+                "audio": audio,
+                "caption": caption,
+                "thumbnail": thumbnail,
+                "protect_content": protect_content,
+                "reply_markup": reply_markup,
+            }
+        )
         self.audio_title = title
         self.protect_content = protect_content
         self.reply_markup = reply_markup
 
     async def answer(self, text, *, reply_markup=None):
         self.text = text
+        self.menu_reply_markup = reply_markup
         self.reply_markup = reply_markup
 
 
@@ -98,19 +107,18 @@ class StartFlowE2ETests(unittest.TestCase):
     def tearDownClass(cls):
         app.db.close()
 
-    def test_start_command_builds_full_song_menu(self):
+    def test_start_command_sends_all_song_previews_without_menu(self):
         message = FakeStartMessage()
 
-        asyncio.run(app.start(message))
+        with patch("infra.bot.Path.is_file", return_value=True):
+            asyncio.run(app.start(message))
 
         self.assertIsNone(message.photo)
         self.assertIn("NOVA ISR ∞ Music Store", message.text)
-        self.assertIsNone(message.audio)
-        labels = [button.text for row in message.reply_markup.inline_keyboard for button in row]
-        self.assertIn("Aatini Turha Sharrahni", labels)
-        self.assertIn("Second Preview", labels)
-        self.assertNotIn("Next ⏭", labels)
-        self.assertNotIn("My purchases", labels)
+        self.assertEqual(len(message.audios), 2)
+        self.assertTrue(all(item["protect_content"] for item in message.audios))
+        self.assertTrue(all(item["reply_markup"] for item in message.audios))
+        self.assertIsNone(message.menu_reply_markup)
 
     def test_reaction_toggles_and_updates_count(self):
         class FakeQueryMessage:

@@ -371,12 +371,12 @@ async def start(message: Message) -> None:
     if not rows:
         await message.answer("No previews are available right now.")
         return
-    buttons = [(display_title(row["title"])[:45], f"t:{row['id']}") for row in rows]
-    markup = keyboard(buttons)
     await message.answer(
-        "NOVA ISR ∞ Music Store\nChoose a 30-second protected preview",
-        reply_markup=markup,
+        "NOVA ISR ∞ Music Store\nAll protected 30-second previews:",
     )
+    for row in rows:
+        if Path(row["preview"]).is_file():
+            await send_preview(message, row, message.from_user.id)
 
 
 @dp.callback_query(F.data == "purchases")

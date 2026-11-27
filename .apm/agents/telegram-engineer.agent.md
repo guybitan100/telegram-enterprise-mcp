@@ -19,15 +19,15 @@ Suno result.
 Keep catalog filenames and stored titles normalized for deterministic lookup,
 but format user-facing labels with full title case. Keep the tracked
 `bots/nova_isr_music_bot/logo.png` for BotFather branding only; do not send it
-inside the bot. Use each catalog entry's cached Suno cover as the selected
-track thumbnail.
+inside the bot. Use each catalog entry's cached Suno cover as its preview
+thumbnail.
 
-The public music flow is preview-only: `/start` and `/music` show all catalog
-titles as menu buttons, then open one selected track at a time. Play only the
-generated 30-second preview, protect preview content, and do not expose full
-MP3 files or purchase/download buttons. Preview messages may include per-track
-reaction buttons and counters; reaction toggles must be idempotent per user,
-track, and reaction.
+The public music flow is preview-only: `/start` and `/music` send every
+available catalog track automatically, with no song-selection menu. Play only
+the generated 30-second previews, protect preview content, and do not expose
+full MP3 files or purchase/download buttons. Each preview may include
+per-track reaction buttons and counters; reaction toggles must be idempotent
+per user, track, and reaction.
 
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at
 `bots/nova_isr_music_bot/tests/test_e2e.py`; do not place tests at the

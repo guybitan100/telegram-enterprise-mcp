@@ -45,13 +45,14 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
-fade-in/out, and stores the original by SHA-256 content hash. Users browse all
-catalog titles from the `/start` or `/music` menu, then open one protected
-30-second preview at a time. Each preview contains three short campaign lines
-and reaction buttons with per-track counters. Full MP3 downloads are disabled.
+fade-in/out, and stores the original by SHA-256 content hash. The `/start` and
+`/music` commands send all catalog tracks automatically as protected 30-second
+previews, without a song-selection menu. Each preview contains three short
+campaign lines and reaction buttons with per-track counters. Full MP3 downloads
+are disabled.
 
 At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
-Suno cover art is cached locally and used as the selected track thumbnail.
+Suno cover art is cached locally and used as each preview's thumbnail.
 Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.

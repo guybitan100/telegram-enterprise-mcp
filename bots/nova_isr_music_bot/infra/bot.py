@@ -69,6 +69,12 @@ db.executescript(
     );
     CREATE UNIQUE INDEX IF NOT EXISTS one_pending
         ON orders(uid, track) WHERE paid=0;
+    CREATE TABLE IF NOT EXISTS reactions(
+        uid INTEGER NOT NULL,
+        track INTEGER NOT NULL,
+        reaction TEXT NOT NULL,
+        PRIMARY KEY(uid, track, reaction)
+    );
     """
 )
 try:
@@ -117,6 +123,17 @@ def promotional_caption(row: sqlite3.Row) -> str:
         f"🔥 {description}\n"
         f"▶️ {PREVIEW_SECONDS}-second preview • Listen now"
     )
+
+
+REACTIONS = (("❤️", "heart"), ("🥰", "love"), ("😍", "wow"), ("🔥", "fire"))
+
+
+def reaction_key(data: str) -> tuple[int, str] | None:
+    parts = data.split(":")
+    valid = {key for _, key in REACTIONS}
+    if len(parts) != 3 or parts[0] != "react" or not parts[1].isdigit():
+        return None
+    return (int(parts[1]), parts[2]) if parts[2] in valid else None
 
 
 def build_preview(source: Path, preview: Path) -> None:
@@ -293,29 +310,53 @@ async def record_payment(payment, user_id: int) -> tuple[str, sqlite3.Row | None
 
 
 async def deliver(chat_id: int, user_id: int, track_id: int) -> None:
-    row = get_track(track_id)
-    if not row or not is_owned(user_id, track_id):
-        return
-    full = Path(row["full"])
-    if not full.is_file():
-        log.error("Missing media for track_id=%s", track_id)
-        await bot.send_message(chat_id, "This download is temporarily unavailable. Contact support.")
-        return
-    await bot.send_document(chat_id, FSInputFile(full), caption=track_caption(row))
+    await bot.send_message(
+        chat_id,
+        "Full downloads are disabled. Only protected 30-second previews are available.",
+    )
 
 
-def navigation_keyboard(rows: list[sqlite3.Row], index: int) -> InlineKeyboardMarkup:
-    buttons: list[tuple[str, str]] = []
+def preview_keyboard(
+    rows: list[sqlite3.Row], index: int, track_id: int, user_id: int
+) -> InlineKeyboardMarkup:
+    counts = {
+        key: count
+        for key, count in db.execute(
+            "SELECT reaction, count(*) FROM reactions WHERE track=? GROUP BY reaction",
+            (track_id,),
+        ).fetchall()
+    }
+    selected = {
+        reaction
+        for (reaction,) in db.execute(
+            "SELECT reaction FROM reactions WHERE track=? AND uid=?",
+            (track_id, user_id),
+        ).fetchall()
+    }
+    reaction_row = [
+        InlineKeyboardButton(
+            text=f"{emoji}{' ✓' if key in selected else ''} {counts.get(key, 0)}",
+            callback_data=f"react:{track_id}:{key}",
+        )
+        for emoji, key in REACTIONS
+    ]
+    navigation: list[InlineKeyboardButton] = []
     if index > 0:
-        buttons.append(("⏮ Previous", f"prev:{rows[index - 1]['id']}"))
+        navigation.append(
+            InlineKeyboardButton(text="⏮ Previous", callback_data=f"prev:{rows[index - 1]['id']}")
+        )
     if index + 1 < len(rows):
-        buttons.append(("Next ⏭", f"next:{rows[index + 1]['id']}"))
+        navigation.append(
+            InlineKeyboardButton(text="Next ⏭", callback_data=f"next:{rows[index + 1]['id']}")
+        )
     else:
-        buttons.append(("Restart 🔄", "restart"))
-    return keyboard(buttons)
+        navigation.append(InlineKeyboardButton(text="Restart 🔄", callback_data="restart"))
+    return InlineKeyboardMarkup(inline_keyboard=[reaction_row, navigation])
 
 
-async def send_preview(message: Message, row: sqlite3.Row, rows: list[sqlite3.Row]) -> None:
+async def send_preview(
+    message: Message, row: sqlite3.Row, rows: list[sqlite3.Row], user_id: int
+) -> None:
     index = next(i for i, candidate in enumerate(rows) if candidate["id"] == row["id"])
     cover = Path(row["cover"]) if row["cover"] else None
     await message.answer_audio(
@@ -325,7 +366,7 @@ async def send_preview(message: Message, row: sqlite3.Row, rows: list[sqlite3.Ro
         caption=promotional_caption(row),
         thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
         protect_content=True,
-        reply_markup=navigation_keyboard(rows, index),
+        reply_markup=preview_keyboard(rows, index, row["id"], user_id),
     )
 
 
@@ -340,7 +381,7 @@ async def start(message: Message) -> None:
             FSInputFile(LOGO_FILE),
             caption="NOVA ISR ∞ Music Store\n30-second previews only",
         )
-    await send_preview(message, rows[0], rows)
+    await send_preview(message, rows[0], rows, message.from_user.id)
 
 
 @dp.callback_query(F.data == "purchases")
@@ -366,7 +407,40 @@ async def show(query: CallbackQuery) -> None:
         await query.message.answer("Track unavailable.")
         return
     rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
-    await send_preview(query.message, row, rows)
+    await send_preview(query.message, row, rows, query.from_user.id)
+
+
+@dp.callback_query(F.data.startswith("react:"))
+async def react(query: CallbackQuery) -> None:
+    parsed = reaction_key(query.data)
+    if not parsed:
+        await query.answer("Reaction unavailable.", show_alert=True)
+        return
+    track_id, reaction = parsed
+    async with db_lock:
+        existing = db.execute(
+            "SELECT 1 FROM reactions WHERE uid=? AND track=? AND reaction=?",
+            (query.from_user.id, track_id, reaction),
+        ).fetchone()
+        if existing:
+            db.execute(
+                "DELETE FROM reactions WHERE uid=? AND track=? AND reaction=?",
+                (query.from_user.id, track_id, reaction),
+            )
+        else:
+            db.execute(
+                "INSERT INTO reactions(uid, track, reaction) VALUES(?,?,?)",
+                (query.from_user.id, track_id, reaction),
+            )
+        db.commit()
+    await query.answer("Reaction updated")
+    rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
+    row = get_track(track_id)
+    if row:
+        index = next(i for i, candidate in enumerate(rows) if candidate["id"] == track_id)
+        await query.message.edit_reply_markup(
+            reply_markup=preview_keyboard(rows, index, track_id, query.from_user.id)
+        )
 
 
 async def navigate(query: CallbackQuery, prefix: str) -> None:
@@ -377,7 +451,7 @@ async def navigate(query: CallbackQuery, prefix: str) -> None:
     if not row or not rows:
         await query.message.answer("Preview unavailable.")
         return
-    await send_preview(query.message, row, rows)
+    await send_preview(query.message, row, rows, query.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("next:"))
@@ -395,7 +469,7 @@ async def restart(query: CallbackQuery) -> None:
     await query.answer()
     rows = db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
     if rows:
-        await send_preview(query.message, rows[0], rows)
+        await send_preview(query.message, rows[0], rows, query.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("d:"))

@@ -45,9 +45,10 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
-fade-in/out, and stores the original by SHA-256 content hash. Users browse the
-catalog with `/start` or `/music`, preview tracks, purchase with Stars, and
-download paid tracks again from **My purchases**.
+fade-in/out, and stores the original by SHA-256 content hash. Users browse one
+preview at a time with `/start` or `/music`. Each item contains three short
+campaign lines, protected 30-second playback, reaction buttons with per-track
+counters, and previous/next navigation. Full MP3 downloads are disabled.
 
 At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
 Suno cover art is cached locally when available. Tracks rejected by Suno's
@@ -76,10 +77,9 @@ Telegram does not provide a supported Bot API method for changing a bot's
 profile photo at runtime. Keep the BotFather icon and the tracked
 `logo.png` synchronized when branding changes.
 
-Payment validation checks the order owner, currency, stored amount, pending
-state, and track existence before accepting payment. Duplicate charges are
-refunded. SQLite uses WAL mode and serialized order/payment mutations to reduce
-concurrency errors.
+SQLite uses WAL mode and serialized mutations for reaction and catalog state.
+Legacy payment callbacks remain guarded, but the public music flow does not
+offer purchases or full-track delivery.
 
 Only publish tracks you may commercially distribute. Test Stars payments and
 refunds before launch. No live payment test is claimed.

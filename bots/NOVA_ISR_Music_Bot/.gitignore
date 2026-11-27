@@ -1,0 +1,15 @@
+# Local secrets and environment
+.env
+
+# Runtime environment and Python cache
+.venv/
+__pycache__/
+*.py[cod]
+
+# Generated bot data and media
+data/
+media/
+
+# Local runtime output
+*.log
+*.tmp

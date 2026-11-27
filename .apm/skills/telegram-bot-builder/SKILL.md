@@ -32,18 +32,16 @@ description: Maintain the Telegram Enterprise MCP with safe read and explicit-wr
 8. Update the root README when runtime behavior, configuration, or safety
    limitations change. Do not deploy or push without explicit authorization.
 
-## Preview-only music flow
+## Paid-media music flow
 
 For the NOVA music bot public experience:
 
-1. On `/start` and `/music`, send every available 30-second MP4 preview in
-   order, with its catalog cover; do not render a song-selection menu or send a
-   second-message play callback.
-2. Let Telegram's native video player control playback in the same message,
-   with `supports_streaming=True` and `protect_content=True`. The Bot API does
-   not control client autoplay preferences.
-   Send the full MP3 only after a validated Telegram Stars payment; stale or
-   unauthenticated callbacks must never bypass payment.
+1. On `/start` and `/music`, send every available full MP4/audio track through
+   Telegram `sendPaidMedia` with its catalog cover and Stars price; do not
+   render a song-selection menu or send a second-message payment callback.
+2. Let Telegram render the locked preview and native `Unlock` payment flow in
+   the same message. Handle `purchased_paid_media` payloads server-side and
+   keep the legacy invoice path validated for older messages.
 3. Use exactly three short campaign lines per preview. Do not add automatic
    next/previous navigation to the preview message.
 4. Provide reaction buttons with server-counted per-track totals. Toggle by

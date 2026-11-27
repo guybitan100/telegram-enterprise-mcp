@@ -46,16 +46,19 @@ Keep one polling instance running per token. Send `/admin` privately as the
 configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
 fade-in/out, and stores the original by SHA-256 content hash. The `/start` and
-`/music` commands send all catalog tracks automatically as 30-second MP4 video
-previews with their Suno covers, without a song-selection menu. Telegram's
-native Play control plays each preview in the same message; autoplay behavior
-is controlled by the Telegram client. Each video contains three short campaign
-lines and reaction buttons with per-track counters. The `⬇️ Buy full song` button opens a Telegram Stars invoice;
-the full MP3 is delivered only after successful server-side payment validation.
+`/music` commands send all catalog tracks automatically as Telegram paid-media
+videos with their Suno covers, without a song-selection menu. Telegram displays
+the media as locked preview content with an `Unlock` button and opens the native
+Stars payment screen in place. After payment, Telegram reveals the full
+video/audio track in the same paid-media message. Each post contains three
+short campaign lines and reaction buttons with per-track counters. A legacy
+invoice/download path remains available for older preview messages and
+purchased-track downloads.
 
-At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
-Suno cover art is cached locally and used as each video's thumbnail. FFmpeg
-creates the video-player preview files in the ignored data directory.
+At startup, the bot indexes MP3s from `mp3/nova_isr/`, generates 30-second
+fallback previews, and generates full paid-media MP4 files from each MP3 and
+cover. Suno cover art is cached locally and used as each video's thumbnail.
+FFmpeg creates the video-player files in the ignored data directory.
 Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.

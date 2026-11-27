@@ -45,9 +45,10 @@ values, tokens, customer media, or database contents.
 - Chat allowlists, dry-run defaults, explicit write gates, and refund guards
   remain intact in the MCP.
 - Paid media and original files are not exposed before successful payment.
-- The public music flow exposes full MP3 files only after a validated Telegram
-  Stars payment; stale or unauthenticated callbacks must never bypass payment.
-  Previews remain protected 30-second media.
+- The public music flow uses Telegram paid media for the full MP4/audio track;
+  Telegram keeps it locked until Stars payment and emits a
+  `purchased_paid_media` update. Stale or unauthenticated callbacks must never
+  bypass payment. Legacy invoice delivery remains server-validated.
 - Preview reaction callbacks validate the track and reaction key, toggle one
   user reaction idempotently, and update counts without trusting client totals.
 - File paths are local, predictable, and cannot be supplied by untrusted users.
@@ -81,10 +82,11 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` send all available 30-second MP4 previews directly,
-  without a song-selection menu or a second-message play callback. Telegram's
-  native player controls playback in the same message; each preview has its
-  catalog cover and exactly three campaign-caption lines.
+- `/start` and `/music` send all available Telegram paid-media MP4 tracks
+  directly, without a song-selection menu or a second-message payment
+  callback. Telegram's native `Unlock` flow reveals the paid media in the same
+  message; each post has its catalog cover and exactly three campaign-caption
+  lines.
 
 ### CI and APM packaging
 

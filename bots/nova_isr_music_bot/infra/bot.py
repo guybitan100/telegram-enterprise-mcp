@@ -15,10 +15,12 @@ from aiogram.filters import Command
 from aiogram.types import (
     CallbackQuery,
     FSInputFile,
+    InputPaidMediaVideo,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LabeledPrice,
     Message,
+    PaidMediaPurchased,
     PreCheckoutQuery,
 )
 from .auth import is_admin_private
@@ -58,6 +60,7 @@ db.executescript(
         full TEXT NOT NULL,
         preview TEXT NOT NULL,
         preview_video TEXT,
+        paid_video TEXT,
         hash TEXT UNIQUE NOT NULL
     );
     CREATE TABLE IF NOT EXISTS orders(
@@ -94,6 +97,7 @@ for column, definition in (
     ("campaign", "TEXT NOT NULL DEFAULT ''"),
     ("cover", "TEXT"),
     ("preview_video", "TEXT"),
+    ("paid_video", "TEXT"),
 ):
     try:
         db.execute(f"ALTER TABLE tracks ADD COLUMN {column} {definition}")
@@ -232,6 +236,40 @@ def build_preview_video(audio: Path, cover: Path, video: Path) -> None:
     )
 
 
+def build_paid_video(audio: Path, cover: Path, video: Path) -> None:
+    """Create the full video Telegram reveals after a paid-media purchase."""
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            str(cover),
+            "-i",
+            str(audio),
+            "-vf",
+            "scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "-shortest",
+            str(video),
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
 def sync_local_catalog() -> None:
     """Publish local MP3s into the catalog using checked-in metadata."""
     if not CATALOG_FILE.is_file():
@@ -252,6 +290,7 @@ def sync_local_catalog() -> None:
             full = DATA_DIR / f"{digest}.mp3"
             preview = DATA_DIR / f"{digest}-preview.mp3"
             preview_video = DATA_DIR / f"{digest}-preview.mp4"
+            paid_video = DATA_DIR / f"{digest}-paid.mp4"
             if not full.is_file():
                 shutil.copyfile(source, full)
             if not preview.is_file():
@@ -271,10 +310,12 @@ def sync_local_catalog() -> None:
                     cover_path = str(cover)
             if cover_path and not preview_video.is_file():
                 build_preview_video(preview, Path(cover_path), preview_video)
+            if cover_path and not paid_video.is_file():
+                build_paid_video(full, Path(cover_path), paid_video)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, campaign, cover, full, preview, preview_video, hash)
-                VALUES(?,?,?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, preview_video, paid_video, hash)
+                VALUES(?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(hash) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
@@ -282,7 +323,8 @@ def sync_local_catalog() -> None:
                     cover=excluded.cover,
                     full=excluded.full,
                     preview=excluded.preview,
-                    preview_video=excluded.preview_video
+                    preview_video=excluded.preview_video,
+                    paid_video=excluded.paid_video
                 """,
                 (
                     item["title"][:120],
@@ -292,6 +334,7 @@ def sync_local_catalog() -> None:
                     str(full),
                     str(preview),
                     str(preview_video) if preview_video.is_file() else None,
+                    str(paid_video) if paid_video.is_file() else None,
                     digest,
                 ),
             )
@@ -428,8 +471,28 @@ async def send_preview_video(
 ) -> None:
     cover = Path(row["cover"]) if row["cover"] else None
     video = Path(row["preview_video"]) if row["preview_video"] else None
+    paid_video = Path(row["paid_video"]) if row["paid_video"] else None
     caption = promotional_caption(row)
-    markup = preview_media_keyboard(row["id"], user_id)
+    markup = preview_keyboard(row["id"], user_id)
+    if paid_video and paid_video.is_file():
+        await message.answer_paid_media(
+            star_count=PRICE_STARS,
+            media=[
+                InputPaidMediaVideo(
+                    media=FSInputFile(paid_video),
+                    thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
+                    cover=FSInputFile(cover) if cover and cover.is_file() else None,
+                    width=720,
+                    height=720,
+                    supports_streaming=True,
+                )
+            ],
+            payload=f"paid:{row['id']}",
+            caption=caption,
+            protect_content=True,
+            reply_markup=markup,
+        )
+        return
     if video and video.is_file():
         await message.answer_video(
             FSInputFile(video),
@@ -452,6 +515,26 @@ async def send_preview_video(
         protect_content=True,
         reply_markup=markup,
     )
+
+
+@dp.purchased_paid_media()
+async def purchased_paid_media(update: PaidMediaPurchased) -> None:
+    """Record paid-media purchases so the normal download path remains available."""
+    track_id = id_from_callback(update.paid_media_payload, "paid:")
+    if track_id is None or not get_track(track_id):
+        log.warning("Ignoring paid-media purchase with unknown payload: %s", update.paid_media_payload)
+        return
+    user_id = update.from_user.id
+    order_id = f"paid:{user_id}:{track_id}:{update.paid_media_payload}"
+    async with db_lock:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO orders(id, uid, track, amount, paid, charge)
+            VALUES(?,?,?,?,1,?)
+            """,
+            (order_id, user_id, track_id, PRICE_STARS, order_id),
+        )
+        db.commit()
 
 
 @dp.message(Command("start", "music"))

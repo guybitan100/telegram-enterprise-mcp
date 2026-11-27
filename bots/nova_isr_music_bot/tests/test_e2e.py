@@ -26,6 +26,7 @@ class FakeStartMessage:
         self.chat = SimpleNamespace(id=42, type="private")
         self.audios = []
         self.videos = []
+        self.paid_media = []
         self.invoices = []
         self.text = None
         self.menu_reply_markup = None
@@ -65,6 +66,9 @@ class FakeStartMessage:
         self.invoices.append(kwargs)
         return SimpleNamespace(message_id=1000 + len(self.invoices))
 
+    async def answer_paid_media(self, **kwargs):
+        self.paid_media.append(kwargs)
+
     async def answer(self, text, *, reply_markup=None):
         self.text = text
         self.menu_reply_markup = reply_markup
@@ -88,6 +92,7 @@ class StartFlowE2ETests(unittest.TestCase):
                 full TEXT NOT NULL,
                 preview TEXT NOT NULL,
                 preview_video TEXT,
+                paid_video TEXT,
                 hash TEXT UNIQUE NOT NULL
             )
             """
@@ -102,26 +107,28 @@ class StartFlowE2ETests(unittest.TestCase):
             "invoice_message_id INTEGER)"
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
-            "VALUES(?,?,?,?,?,?)",
+            "INSERT INTO tracks(title, description, full, preview, preview_video, paid_video, hash) "
+            "VALUES(?,?,?,?,?,?,?)",
             (
                 "aatini turha sharrahni",
                 "Offline test track",
                 "/tmp/full.mp3",
                 "/tmp/preview.mp3",
                 "/tmp/preview.mp4",
+                "/tmp/paid.mp4",
                 "offline-test-hash",
             ),
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
-            "VALUES(?,?,?,?,?,?)",
+            "INSERT INTO tracks(title, description, full, preview, preview_video, paid_video, hash) "
+            "VALUES(?,?,?,?,?,?,?)",
             (
                 "second preview",
                 "Another offline test track",
                 "/tmp/full-2.mp3",
                 "/tmp/preview-2.mp3",
                 "/tmp/preview-2.mp4",
+                "/tmp/paid-2.mp4",
                 "offline-test-hash-2",
             ),
         )
@@ -137,17 +144,17 @@ class StartFlowE2ETests(unittest.TestCase):
         with patch("infra.bot.Path.is_file", return_value=True):
             asyncio.run(app.start(message))
 
-        self.assertEqual(len(message.videos), 2)
+        self.assertEqual(len(message.videos), 0)
         self.assertIn("NOVA ISR ∞ Music Store", message.text)
         self.assertTrue(all(item["protect_content"] for item in message.videos))
         self.assertTrue(all(item["supports_streaming"] for item in message.videos))
         self.assertTrue(all(item["duration"] == 30 for item in message.videos))
-        download_buttons = [
-            row[0].text
-            for item in message.videos
-            for row in item["reply_markup"].inline_keyboard[:1]
-        ]
-        self.assertEqual(download_buttons, ["⬇️ Buy full song • 50⭐"] * 2)
+        self.assertEqual(len(message.paid_media), 2)
+        self.assertEqual([item["star_count"] for item in message.paid_media], [50, 50])
+        self.assertEqual(
+            [item["payload"] for item in message.paid_media], ["paid:2", "paid:1"]
+        )
+        self.assertTrue(all(item["protect_content"] for item in message.paid_media))
         self.assertFalse(message.audios)
         self.assertIsNone(message.menu_reply_markup)
 
@@ -176,6 +183,22 @@ class StartFlowE2ETests(unittest.TestCase):
             app.db.execute("SELECT invoice_message_id FROM orders").fetchone()[0]
         )
         self.assertEqual(query.answer_text, "Payment invoice already sent above.")
+
+    def test_paid_media_purchase_records_owned_track(self):
+        update = SimpleNamespace(
+            paid_media_payload="paid:2",
+            from_user=SimpleNamespace(id=99),
+        )
+
+        asyncio.run(app.purchased_paid_media(update))
+
+        self.assertTrue(app.is_owned(99, 2))
+        order = app.db.execute(
+            "SELECT paid, charge FROM orders WHERE uid=? AND track=?",
+            (99, 2),
+        ).fetchone()
+        self.assertEqual(order["paid"], 1)
+        self.assertTrue(order["charge"].startswith("paid:99:2:"))
 
     def test_reaction_toggles_and_updates_count(self):
         class FakeQueryMessage:

@@ -22,15 +22,15 @@ but format user-facing labels with full title case. Keep the tracked
 inside the bot. Use each catalog entry's cached Suno cover as its preview
 thumbnail.
 
-The public music flow is preview-only: `/start` and `/music` send every
-available catalog track automatically, with no song-selection menu. Play only
-the protected 30-second MP4 directly with its catalog cover, so Telegram's
-native Play control operates on the same message and does not open a second
-preview message. The Bot API does not control client autoplay preferences.
-Full MP3 downloads are available only after a validated Telegram Stars payment;
-never expose them through an unauthenticated or stale callback. Each video may
-include per-track reaction buttons and counters; reaction toggles must be
-idempotent per user, track, and reaction.
+The public music flow uses Telegram paid media: `/start` and `/music` send every
+available catalog track automatically, with no song-selection menu. Send the
+full MP4/audio track as paid media with its catalog cover so Telegram renders
+the locked preview and native `Unlock` Stars flow in the same message. After
+payment Telegram reveals the media; record `purchased_paid_media` payloads so
+the existing authorized download path can recognize the purchase. Keep the
+legacy invoice flow only for older preview messages. Each post may include
+per-track reaction buttons and counters; reaction toggles must be idempotent
+per user, track, and reaction.
 
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at
 `bots/nova_isr_music_bot/tests/test_e2e.py`; do not place tests at the

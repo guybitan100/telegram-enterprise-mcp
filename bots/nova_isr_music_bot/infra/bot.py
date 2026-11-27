@@ -1,11 +1,13 @@
 import asyncio
 import hashlib
+import json
 import logging
 import secrets
 import shutil
 import sqlite3
 import subprocess
 import tempfile
+import urllib.request
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
@@ -37,6 +39,9 @@ log = logging.getLogger("nova-isr")
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
+BOT_ROOT = Path(__file__).resolve().parents[1]
+CATALOG_FILE = BOT_ROOT / "catalog.json"
+LOCAL_TRACK_DIR = BOT_ROOT / "mp3" / "nova_isr"
 db = sqlite3.connect(DATA_DIR / "store.db", timeout=30)
 db.row_factory = sqlite3.Row
 db.execute("PRAGMA journal_mode=WAL")
@@ -46,6 +51,8 @@ db.executescript(
     CREATE TABLE IF NOT EXISTS tracks(
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        cover TEXT,
         full TEXT NOT NULL,
         preview TEXT NOT NULL,
         hash TEXT UNIQUE NOT NULL
@@ -67,6 +74,12 @@ try:
 except sqlite3.OperationalError as exc:
     if "duplicate column name" not in str(exc).lower():
         raise
+for column, definition in (("description", "TEXT NOT NULL DEFAULT ''"), ("cover", "TEXT")):
+    try:
+        db.execute(f"ALTER TABLE tracks ADD COLUMN {column} {definition}")
+    except sqlite3.OperationalError as exc:
+        if f"duplicate column name: {column}" not in str(exc).lower():
+            raise
 db.commit()
 
 # Handlers share one SQLite connection. Serialize mutations and payment checks.
@@ -93,6 +106,117 @@ def id_from_callback(data: str, prefix: str) -> int | None:
 
 def get_track(track_id: int) -> sqlite3.Row | None:
     return db.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
+
+
+def track_caption(row: sqlite3.Row) -> str:
+    description = (row["description"] or "").strip()
+    return f"{row['title']}\n\n{description}"[:1024] if description else row["title"]
+
+
+def build_preview(source: Path, preview: Path) -> None:
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    duration = float(probe.stdout.strip())
+    if duration < PREVIEW_SECONDS:
+        raise ValueError(f"track is shorter than {PREVIEW_SECONDS} seconds")
+    start = max(0, (duration - PREVIEW_SECONDS) / 2)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-ss",
+            str(start),
+            "-i",
+            str(source),
+            "-t",
+            str(PREVIEW_SECONDS),
+            "-af",
+            f"afade=t=in:d=0.5,afade=t=out:st={max(0, PREVIEW_SECONDS - 1)}:d=1",
+            "-map_metadata",
+            "-1",
+            "-vn",
+            str(preview),
+        ],
+        check=True,
+        timeout=120,
+    )
+
+
+def sync_local_catalog() -> None:
+    """Publish local MP3s into the catalog using checked-in metadata."""
+    if not CATALOG_FILE.is_file():
+        return
+    try:
+        catalog = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        log.exception("Could not read local catalog")
+        return
+
+    for item in catalog:
+        source = LOCAL_TRACK_DIR / item["file"]
+        if not source.is_file():
+            log.warning("Catalog track is missing: %s", source)
+            continue
+        try:
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            full = DATA_DIR / f"{digest}.mp3"
+            preview = DATA_DIR / f"{digest}-preview.mp3"
+            if not full.is_file():
+                shutil.copyfile(source, full)
+            if not preview.is_file():
+                build_preview(source, preview)
+            cover_path = None
+            cover_url = item.get("cover_url")
+            if cover_url:
+                cover = DATA_DIR / "covers" / f"{digest}.jpg"
+                cover.parent.mkdir(parents=True, exist_ok=True)
+                if not cover.is_file():
+                    try:
+                        with urllib.request.urlopen(cover_url, timeout=30) as response:
+                            cover.write_bytes(response.read())
+                    except OSError:
+                        log.warning("Could not download cover for %s", source)
+                if cover.is_file():
+                    cover_path = str(cover)
+            db.execute(
+                """
+                INSERT INTO tracks(title, description, cover, full, preview, hash)
+                VALUES(?,?,?,?,?,?)
+                ON CONFLICT(hash) DO UPDATE SET
+                    title=excluded.title,
+                    description=excluded.description,
+                    cover=excluded.cover,
+                    full=excluded.full,
+                    preview=excluded.preview
+                """,
+                (
+                    item["title"][:120],
+                    item.get("description", "")[:900],
+                    cover_path,
+                    str(full),
+                    str(preview),
+                    digest,
+                ),
+            )
+        except (OSError, ValueError, subprocess.SubprocessError, sqlite3.Error):
+            log.exception("Could not index local track: %s", source)
+    db.commit()
 
 
 def is_owned(user_id: int, track_id: int) -> bool:
@@ -171,7 +295,7 @@ async def deliver(chat_id: int, user_id: int, track_id: int) -> None:
         log.error("Missing media for track_id=%s", track_id)
         await bot.send_message(chat_id, "This download is temporarily unavailable. Contact support.")
         return
-    await bot.send_document(chat_id, FSInputFile(full), caption=row["title"])
+    await bot.send_document(chat_id, FSInputFile(full), caption=track_caption(row))
 
 
 @dp.message(Command("start", "music"))
@@ -210,6 +334,8 @@ async def show(query: CallbackQuery) -> None:
         FSInputFile(row["preview"]),
         title=f"{row['title']} (Preview)",
         performer="NOVA ISR",
+        caption=track_caption(row),
+        thumbnail=FSInputFile(row["cover"]) if row["cover"] else None,
         reply_markup=keyboard(
             [
                 (
@@ -244,7 +370,7 @@ async def buy(query: CallbackQuery) -> None:
     await bot.send_invoice(
         user_id,
         title=row["title"][:32],
-        description="Original MP3 download",
+        description=(row["description"] or "Original MP3 download")[:255],
         payload=order["id"],
         currency="XTR",
         prices=[LabeledPrice(label="Full MP3", amount=order["amount"])],
@@ -331,56 +457,22 @@ async def upload(message: Message) -> None:
         full = DATA_DIR / f"{digest}.mp3"
         preview = DATA_DIR / f"{digest}-preview.mp3"
         try:
-            probe = subprocess.run(
-                [
-                    "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "csv=p=0",
-                    str(source),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            duration = float(probe.stdout.strip())
-            if duration < PREVIEW_SECONDS:
-                await message.answer(
-                    f"Track must be at least {PREVIEW_SECONDS} seconds long."
-                )
-                return
-            start = max(0, (duration - PREVIEW_SECONDS) / 2)
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-v",
-                    "error",
-                    "-y",
-                    "-ss",
-                    str(start),
-                    "-i",
-                    str(source),
-                    "-t",
-                    str(PREVIEW_SECONDS),
-                    "-af",
-                    f"afade=t=in:d=0.5,afade=t=out:st={max(0, PREVIEW_SECONDS - 1)}:d=1",
-                    "-map_metadata",
-                    "-1",
-                    "-vn",
-                    str(preview_tmp),
-                ],
-                check=True,
-                timeout=120,
-            )
+            build_preview(source, preview_tmp)
             shutil.copyfile(source, full)
             shutil.copyfile(preview_tmp, preview)
             db.execute(
-                "INSERT INTO tracks(title, full, preview, hash) VALUES(?,?,?,?)",
-                ((message.caption or audio.title or "Untitled")[:120], str(full), str(preview), digest),
+                """
+                INSERT INTO tracks(title, description, cover, full, preview, hash)
+                VALUES(?,?,?,?,?,?)
+                """,
+                (
+                    (message.caption or audio.title or "Untitled")[:120],
+                    "",
+                    None,
+                    str(full),
+                    str(preview),
+                    digest,
+                ),
             )
             db.commit()
             await message.answer("Published successfully")
@@ -393,6 +485,7 @@ async def upload(message: Message) -> None:
 
 
 async def main() -> None:
+    sync_local_catalog()
     me = await bot.get_me()
     if EXPECTED_BOT_USERNAME and (me.username or "").lower() != EXPECTED_BOT_USERNAME:
         raise RuntimeError(f"BOT_TOKEN belongs to @{me.username}, not @{EXPECTED_BOT_USERNAME}")

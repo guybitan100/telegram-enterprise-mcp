@@ -34,6 +34,8 @@ working directory. Never commit `.env`, `data/store.db`, or media files.
 - `infra/bot.py`: public Telegram handlers, catalog, delivery, and payment flow.
 - `infra/auth.py`: private admin authorization checks.
 - `infra/config.py`: environment loading and validated runtime configuration.
+- `catalog.json`: local MP3 titles, descriptions, and optional Suno cover metadata.
+- `data/covers/`: downloaded cover art and generated previews; ignored by Git.
 
 ## Usage
 
@@ -44,14 +46,18 @@ fade-in/out, and stores the original by SHA-256 content hash. Users browse the
 catalog with `/start` or `/music`, preview tracks, purchase with Stars, and
 download paid tracks again from **My purchases**.
 
+At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
+Suno cover art is cached locally when available. Tracks rejected by Suno's
+copyright filter keep their local production-tag descriptions and do not claim
+Suno-generated cover metadata.
+
 Payment validation checks the order owner, currency, stored amount, pending
 state, and track existence before accepting payment. Duplicate charges are
 refunded. SQLite uses WAL mode and serialized order/payment mutations to reduce
 concurrency errors.
 
-Only publish tracks you may commercially distribute. Suno metadata and artwork
-integration are not implemented; supply the title manually. Test Stars
-payments and refunds before launch. No live Telegram test is claimed.
+Only publish tracks you may commercially distribute. Test Stars payments and
+refunds before launch. No live payment test is claimed.
 
 ## Production gaps
 

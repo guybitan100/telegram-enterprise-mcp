@@ -22,7 +22,8 @@ Read the relevant files before reviewing:
 - `README.md` for the MCP contract and production limitations.
 - `.apm/instructions/repository.instructions.md` for repository guardrails.
 - `.apm/skills/telegram-bot-builder/SKILL.md` for Telegram safety rules.
-- `bots/nova_isr_music_bot/README.md` and its `bot.py` for bot behavior.
+- `bots/nova_isr_music_bot/README.md`, `catalog.json`, and its `infra/` modules
+  for bot behavior and local catalog ownership.
 - `apm.yml`, `.apm/agents/`, `.apm/skills/`, and `.apm/instructions/` for
   package structure and front matter.
 
@@ -64,6 +65,10 @@ values, tokens, customer media, or database contents.
 - Async handlers do not introduce unbounded blocking work or unsafe shared
   state.
 - Documentation, `.env.example`, requirements, setup scripts, and code agree.
+- Local catalog startup sync is deterministic, idempotent by content hash, and
+  does not silently publish files outside the configured local track directory.
+- Preview generation and cover caching fail safely per track without blocking
+  the entire bot from starting.
 
 ### CI and APM packaging
 
@@ -104,6 +109,11 @@ values, tokens, customer media, or database contents.
   authentication, generation success, licensing, or download permissions.
   Never place Suno cookies, API keys, or session tokens in tracked files or
   logs.
+- Treat `catalog.json` as metadata, not proof of licensing or ownership. Keep
+  Suno clip IDs and public cover URLs separate from secrets, and preserve the
+  source of fallback descriptions when Suno rejects an upload.
+- Review cover downloads for bounded timeouts, local cache paths, safe file
+  names, and no untrusted URL or path interpolation.
 - Do not flatten directories or rename files solely to satisfy a casing
   preference if imports, packaging, deployment, or public interfaces would
   become less reliable.
@@ -125,6 +135,7 @@ values, tokens, customer media, or database contents.
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`
    - `python -m pytest -q` when pytest is installed
+   - `python3 -m json.tool bots/nova_isr_music_bot/catalog.json`
    - `git diff --check`
    - a tracked-path and stale-reference check after renames
 7. Never start polling, call live Telegram APIs, test real payments, or expose

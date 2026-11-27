@@ -57,6 +57,7 @@ db.executescript(
         cover TEXT,
         full TEXT NOT NULL,
         preview TEXT NOT NULL,
+        preview_video TEXT,
         hash TEXT UNIQUE NOT NULL
     );
     CREATE TABLE IF NOT EXISTS orders(
@@ -86,6 +87,7 @@ for column, definition in (
     ("description", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "TEXT NOT NULL DEFAULT ''"),
     ("cover", "TEXT"),
+    ("preview_video", "TEXT"),
 ):
     try:
         db.execute(f"ALTER TABLE tracks ADD COLUMN {column} {definition}")
@@ -188,6 +190,42 @@ def build_preview(source: Path, preview: Path) -> None:
     )
 
 
+def build_preview_video(audio: Path, cover: Path, video: Path) -> None:
+    """Create a Telegram video-player preview using the catalog cover art."""
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            str(cover),
+            "-i",
+            str(audio),
+            "-t",
+            str(PREVIEW_SECONDS),
+            "-vf",
+            "scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "-shortest",
+            str(video),
+        ],
+        check=True,
+        timeout=180,
+    )
+
+
 def sync_local_catalog() -> None:
     """Publish local MP3s into the catalog using checked-in metadata."""
     if not CATALOG_FILE.is_file():
@@ -207,6 +245,7 @@ def sync_local_catalog() -> None:
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             full = DATA_DIR / f"{digest}.mp3"
             preview = DATA_DIR / f"{digest}-preview.mp3"
+            preview_video = DATA_DIR / f"{digest}-preview.mp4"
             if not full.is_file():
                 shutil.copyfile(source, full)
             if not preview.is_file():
@@ -224,17 +263,20 @@ def sync_local_catalog() -> None:
                         log.warning("Could not download cover for %s", source)
                 if cover.is_file():
                     cover_path = str(cover)
+            if cover_path and not preview_video.is_file():
+                build_preview_video(preview, Path(cover_path), preview_video)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, campaign, cover, full, preview, hash)
-                VALUES(?,?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, preview_video, hash)
+                VALUES(?,?,?,?,?,?,?,?)
                 ON CONFLICT(hash) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
                     campaign=excluded.campaign,
                     cover=excluded.cover,
                     full=excluded.full,
-                    preview=excluded.preview
+                    preview=excluded.preview,
+                    preview_video=excluded.preview_video
                 """,
                 (
                     item["title"][:120],
@@ -243,6 +285,7 @@ def sync_local_catalog() -> None:
                     cover_path,
                     str(full),
                     str(preview),
+                    str(preview_video) if preview_video.is_file() else None,
                     digest,
                 ),
             )
@@ -354,14 +397,30 @@ async def send_preview(
     message: Message, row: sqlite3.Row, user_id: int
 ) -> None:
     cover = Path(row["cover"]) if row["cover"] else None
+    video = Path(row["preview_video"]) if row["preview_video"] else None
+    caption = promotional_caption(row)
+    markup = preview_keyboard(row["id"], user_id)
+    if video and video.is_file():
+        await message.answer_video(
+            FSInputFile(video),
+            duration=PREVIEW_SECONDS,
+            width=720,
+            height=720,
+            caption=caption,
+            thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
+            supports_streaming=True,
+            protect_content=True,
+            reply_markup=markup,
+        )
+        return
     await message.answer_audio(
         FSInputFile(row["preview"]),
         title=f"{display_title(row['title'])} (30s Preview)",
         performer="NOVA ISR",
-        caption=promotional_caption(row),
+        caption=caption,
         thumbnail=FSInputFile(cover) if cover and cover.is_file() else None,
         protect_content=True,
-        reply_markup=preview_keyboard(row["id"], user_id),
+        reply_markup=markup,
     )
 
 
@@ -517,8 +576,8 @@ async def upload(message: Message) -> None:
             shutil.copyfile(preview_tmp, preview)
             db.execute(
                 """
-                INSERT INTO tracks(title, description, campaign, cover, full, preview, hash)
-                VALUES(?,?,?,?,?,?,?)
+                INSERT INTO tracks(title, description, campaign, cover, full, preview, preview_video, hash)
+                VALUES(?,?,?,?,?,?,?,?)
                 """,
                 (
                     (message.caption or audio.title or "Untitled")[:120],
@@ -527,6 +586,7 @@ async def upload(message: Message) -> None:
                     None,
                     str(full),
                     str(preview),
+                    None,
                     digest,
                 ),
             )

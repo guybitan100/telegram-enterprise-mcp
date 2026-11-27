@@ -26,6 +26,7 @@ class FakeStartMessage:
         self.photo = None
         self.photo_caption = None
         self.audios = []
+        self.videos = []
         self.text = None
         self.menu_reply_markup = None
         self.reply_markup = None
@@ -47,6 +48,22 @@ class FakeStartMessage:
         )
         self.audio_title = title
         self.protect_content = protect_content
+        self.reply_markup = reply_markup
+
+    async def answer_video(self, video, *, duration, width, height, caption, thumbnail, supports_streaming, protect_content, reply_markup):
+        self.videos.append(
+            {
+                "video": video,
+                "duration": duration,
+                "width": width,
+                "height": height,
+                "caption": caption,
+                "thumbnail": thumbnail,
+                "supports_streaming": supports_streaming,
+                "protect_content": protect_content,
+                "reply_markup": reply_markup,
+            }
+        )
         self.reply_markup = reply_markup
 
     async def answer(self, text, *, reply_markup=None):
@@ -71,6 +88,7 @@ class StartFlowE2ETests(unittest.TestCase):
                 cover TEXT,
                 full TEXT NOT NULL,
                 preview TEXT NOT NULL,
+                preview_video TEXT,
                 hash TEXT UNIQUE NOT NULL
             )
             """
@@ -80,24 +98,26 @@ class StartFlowE2ETests(unittest.TestCase):
             "PRIMARY KEY(uid, track, reaction))"
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, hash) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
+            "VALUES(?,?,?,?,?,?)",
             (
                 "aatini turha sharrahni",
                 "Offline test track",
                 "/tmp/full.mp3",
                 "/tmp/preview.mp3",
+                "/tmp/preview.mp4",
                 "offline-test-hash",
             ),
         )
         app.db.execute(
-            "INSERT INTO tracks(title, description, full, preview, hash) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO tracks(title, description, full, preview, preview_video, hash) "
+            "VALUES(?,?,?,?,?,?)",
             (
                 "second preview",
                 "Another offline test track",
                 "/tmp/full-2.mp3",
                 "/tmp/preview-2.mp3",
+                "/tmp/preview-2.mp4",
                 "offline-test-hash-2",
             ),
         )
@@ -115,9 +135,12 @@ class StartFlowE2ETests(unittest.TestCase):
 
         self.assertIsNone(message.photo)
         self.assertIn("NOVA ISR ∞ Music Store", message.text)
-        self.assertEqual(len(message.audios), 2)
-        self.assertTrue(all(item["protect_content"] for item in message.audios))
-        self.assertTrue(all(item["reply_markup"] for item in message.audios))
+        self.assertEqual(len(message.videos), 2)
+        self.assertTrue(all(item["protect_content"] for item in message.videos))
+        self.assertTrue(all(item["supports_streaming"] for item in message.videos))
+        self.assertTrue(all(item["reply_markup"] for item in message.videos))
+        self.assertTrue(all(item["duration"] == 30 for item in message.videos))
+        self.assertFalse(message.audios)
         self.assertIsNone(message.menu_reply_markup)
 
     def test_reaction_toggles_and_updates_count(self):

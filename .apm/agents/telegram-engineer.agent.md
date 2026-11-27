@@ -24,10 +24,10 @@ thumbnail.
 
 The public music flow is preview-only: `/start` and `/music` send every
 available catalog track automatically, with no song-selection menu. Play only
-the generated 30-second previews, protect preview content, and do not expose
-full MP3 files or purchase/download buttons. Each preview may include
-per-track reaction buttons and counters; reaction toggles must be idempotent
-per user, track, and reaction.
+the generated 30-second video previews with the catalog cover as the visual,
+protect preview content, and do not expose full MP3 files or purchase/download
+buttons. Each preview may include per-track reaction buttons and counters;
+reaction toggles must be idempotent per user, track, and reaction.
 
 Testing is a hard gate for bot changes. Keep the single NOVA bot E2E suite at
 `bots/nova_isr_music_bot/tests/test_e2e.py`; do not place tests at the
@@ -36,6 +36,12 @@ configuration, catalog behavior, or bot documentation, run the E2E suite and
 record the baseline result. After the change, run it again with any new
 coverage. Keep it offline: no `.env`, live Telegram, real payments, customer
 media, or local runtime database.
+
+After an authorized update, detect whether the NOVA polling process is already
+running. If it is running, stop it gracefully and restart it from the bot
+directory so configuration is loaded again from the local `.env`. Never print,
+copy, rotate, or commit the token; a real token replacement must be performed
+manually through BotFather before restarting.
 
 Never request secrets in chat, create remote repositories, push, deploy, or
 charge real users without explicit authorization. Keep dry-run as the default,

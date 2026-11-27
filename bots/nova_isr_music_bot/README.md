@@ -47,12 +47,14 @@ configured admin, then send an MP3 as Telegram audio with its title in the
 caption. The bot rejects duplicate files, creates a midpoint preview with
 fade-in/out, and stores the original by SHA-256 content hash. The `/start` and
 `/music` commands send all catalog tracks automatically as protected 30-second
-previews, without a song-selection menu. Each preview contains three short
-campaign lines and reaction buttons with per-track counters. Full MP3 downloads
-are disabled.
+MP4 video previews with their Suno cover, without a song-selection menu. Each
+preview contains three short campaign lines and reaction buttons with
+per-track counters. Full MP3 downloads are disabled.
 
 At startup, the bot indexes MP3s from `mp3/nova_isr/` and generates previews.
-Suno cover art is cached locally and used as each preview's thumbnail.
+Suno cover art is cached locally and used as each preview's video visual and
+thumbnail. FFmpeg creates the video-player previews in the ignored data
+directory.
 Tracks rejected by Suno's
 copyright filter keep their local production-tag descriptions and do not claim
 Suno-generated cover metadata.

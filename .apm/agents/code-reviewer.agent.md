@@ -81,8 +81,9 @@ values, tokens, customer media, or database contents.
   full title case consistently; filenames must not be renamed for presentation.
 - The checked-in `logo.png` is reserved for BotFather branding and is not sent
   in the bot flow; selected previews use their catalog/Suno cover thumbnail.
-- `/start` and `/music` send all available previews automatically without a
-  song-selection menu. Each preview has exactly three campaign-caption lines.
+- `/start` and `/music` send all available video previews automatically without
+  a song-selection menu. Each preview has the catalog cover and exactly three
+  campaign-caption lines.
 
 ### CI and APM packaging
 
@@ -152,6 +153,10 @@ values, tokens, customer media, or database contents.
    for the changed behavior. Keep all bot tests under
    `bots/nova_isr_music_bot/tests/test_e2e.py`. If the suite is unavailable,
    report that gap rather than treating compilation alone as test coverage.
+   If the reviewed change is applied and a NOVA polling process is already
+   running, require a graceful restart from the bot directory so `.env` is
+   loaded again. Do not print, expose, rotate, or commit the token; token
+   replacement remains a manual BotFather operation.
 7. Run focused validation after changes. Prefer:
    - `python3 -m py_compile bots/nova_isr_music_bot/bot.py`
    - `bash -n bots/nova_isr_music_bot/setup.sh`
